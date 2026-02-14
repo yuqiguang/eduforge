@@ -1,0 +1,23 @@
+{
+  "name": "eduforge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "开源教育 AI 引擎",
+  "scripts": {
+    "dev": "pnpm --filter @eduforge/core dev",
+    "dev:web": "pnpm --filter @eduforge/web dev",
+    "build": "pnpm -r build"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=8"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "esbuild"
+    ]
+  }
+}

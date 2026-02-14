@@ -1,0 +1,219 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===== 用户 =====
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String?    @unique
+  phone        String?    @unique
+  name         String
+  passwordHash String
+  role         UserRole   @default(STUDENT)
+  status       UserStatus @default(ACTIVE)
+  avatarUrl    String?
+  schoolId     String?
+  school       School?    @relation(fields: [schoolId], references: [id])
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  teacherProfile Teacher?
+  studentProfile Student?
+  aiUsageLogs    AIUsageLog[]
+
+  @@index([schoolId])
+  @@index([role])
+}
+
+model Teacher {
+  id        String         @id @default(cuid())
+  userId    String         @unique
+  user      User           @relation(fields: [userId], references: [id])
+  title     String?
+  createdAt DateTime       @default(now())
+  classes   ClassTeacher[]
+}
+
+model Student {
+  id        String         @id @default(cuid())
+  userId    String         @unique
+  user      User           @relation(fields: [userId], references: [id])
+  studentNo String?
+  createdAt DateTime       @default(now())
+  classes   ClassStudent[]
+}
+
+// ===== 组织结构 =====
+
+model School {
+  id        String     @id @default(cuid())
+  name      String
+  code      String     @unique
+  address   String?
+  phone     String?
+  logo      String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  users     User[]
+  grades    Grade[]
+  aiConfigs AIConfig[]
+}
+
+model StudyLevel {
+  id    String @id @default(cuid())
+  code  String @unique
+  name  String
+  order Int
+
+  grades Grade[]
+}
+
+model Grade {
+  id           String     @id @default(cuid())
+  name         String
+  code         String     @unique
+  order        Int
+  studyLevelId String
+  studyLevel   StudyLevel @relation(fields: [studyLevelId], references: [id])
+  schoolId     String?
+  school       School?    @relation(fields: [schoolId], references: [id])
+  createdAt    DateTime   @default(now())
+
+  classes Class[]
+
+  @@index([studyLevelId])
+  @@index([schoolId])
+}
+
+model Class {
+  id           String   @id @default(cuid())
+  name         String
+  gradeId      String
+  grade        Grade    @relation(fields: [gradeId], references: [id])
+  academicYear String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  teachers ClassTeacher[]
+  students ClassStudent[]
+
+  @@index([gradeId])
+}
+
+model Subject {
+  id    String @id @default(cuid())
+  name  String
+  code  String @unique
+  color String?
+  icon  String?
+  order Int    @default(0)
+
+  classTeachers ClassTeacher[]
+}
+
+model ClassTeacher {
+  classId   String
+  cls       Class   @relation(fields: [classId], references: [id])
+  teacherId String
+  teacher   Teacher @relation(fields: [teacherId], references: [id])
+  subjectId String
+  subject   Subject @relation(fields: [subjectId], references: [id])
+
+  @@id([classId, teacherId, subjectId])
+}
+
+model ClassStudent {
+  classId   String
+  cls       Class   @relation(fields: [classId], references: [id])
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id])
+
+  @@id([classId, studentId])
+}
+
+// ===== 插件管理 =====
+
+enum PluginStatus {
+  ACTIVE
+  DISABLED
+  ERROR
+}
+
+model Plugin {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  version     String
+  displayName String?
+  description String?
+  status      PluginStatus @default(ACTIVE)
+  config      Json?
+  installedAt DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+// ===== AI 配置 =====
+
+model AIConfig {
+  id        String   @id @default(cuid())
+  schoolId  String?
+  school    School?  @relation(fields: [schoolId], references: [id])
+  provider  String
+  model     String
+  apiKey    String
+  baseUrl   String?
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId])
+}
+
+model AIUsageLog {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  schoolId     String?
+  plugin       String
+  provider     String
+  model        String
+  inputTokens  Int
+  outputTokens Int
+  cost         Float?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([schoolId])
+  @@index([createdAt])
+}
+
+// ===== 系统设置 =====
+
+model Setting {
+  key   String @id
+  value Json
+  scope String @default("system")
+
+  @@index([scope])
+}
