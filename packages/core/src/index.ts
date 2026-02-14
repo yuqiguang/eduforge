@@ -53,10 +53,14 @@ async function main() {
     }));
   });
 
-  // TODO: 加载内置插件
-  // await pluginLoader.load(questionBankPlugin);
-  // await pluginLoader.load(homeworkPlugin);
-  // await pluginLoader.load(aiGradingPlugin);
+  // 加载内置插件
+  const { default: questionBankPlugin } = await import('../../../plugins/question-bank/src/index.js');
+  const { default: homeworkPlugin } = await import('../../../plugins/homework/src/index.js');
+  const { default: aiGradingPlugin } = await import('../../../plugins/ai-grading/src/index.js');
+
+  await pluginLoader.load(questionBankPlugin);
+  await pluginLoader.load(homeworkPlugin);
+  await pluginLoader.load(aiGradingPlugin);
 
   // 启动服务
   try {
