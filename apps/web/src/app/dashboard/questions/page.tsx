@@ -59,6 +59,13 @@ export default function QuestionsPage() {
         </div>
       </div>
 
+      {/* 题库提示卡片 */}
+      {!loading && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800 mb-6">
+          <p>📚 题库已有 <b>{total}</b> 道题。支持手动添加或 AI 自动生成。</p>
+        </div>
+      )}
+
       {/* 题目列表 */}
       {loading ? (
         <div className="text-center py-12 text-gray-400">加载中...</div>

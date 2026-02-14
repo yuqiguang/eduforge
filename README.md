@@ -55,6 +55,55 @@ eduforge/
 | AI | OpenAI 兼容接口（通义千问/DeepSeek/文心一言/Ollama） |
 | 部署 | Docker Compose |
 
+## Docker 部署
+
+### 一键启动
+
+```bash
+# 复制环境变量模板并修改
+cp .env.example .env
+# 编辑 .env，设置 JWT_SECRET、POSTGRES_PASSWORD 等
+
+# 构建并启动所有服务
+docker compose up -d
+
+# 查看日志
+docker compose logs -f
+```
+
+启动后访问 `http://localhost` 即可使用。
+
+### 架构
+
+- **nginx** (:80) — 反向代理统一入口
+  - `/` → Next.js 前端
+  - `/api/` → Fastify 后端
+- **web** (:3000) — Next.js 前端
+- **api** (:3001) — Fastify 后端（自动执行 prisma db push 建表）
+- **postgres** (:5432) — 数据库（仅内部网络，不对外暴露）
+
+### 环境变量
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `POSTGRES_PASSWORD` | 数据库密码 | `eduforge_secret` |
+| `JWT_SECRET` | JWT 签名密钥 | `change-me-in-production` |
+| `NEXT_PUBLIC_API_URL` | 前端调用 API 的地址 | `http://localhost/api` |
+| `NGINX_PORT` | Nginx 监听端口 | `80` |
+
+### 常用命令
+
+```bash
+# 停止
+docker compose down
+
+# 停止并删除数据卷
+docker compose down -v
+
+# 重新构建
+docker compose build --no-cache
+```
+
 ## 文档
 
 - [架构方案](docs/ARCHITECTURE.md)

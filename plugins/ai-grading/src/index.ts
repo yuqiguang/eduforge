@@ -53,8 +53,10 @@ const aiGradingPlugin: EduPlugin = {
           ? JSON.parse(submission.answers)
           : submission.answers;
 
-        const result = await ctx.ai.complete({
-          task: 'grading',
+        let result;
+        try {
+          result = await ctx.ai.complete({
+            task: 'grading',
           messages: [
             {
               role: 'system',
@@ -85,6 +87,15 @@ const aiGradingPlugin: EduPlugin = {
           temperature: 0.3,
           plugin: 'ai-grading',
         });
+        } catch (aiErr: any) {
+          ctx.logger.error(`AI 服务调用失败: ${aiErr.message}`);
+          // 更新状态为批改失败
+          await ctx.prisma.$executeRawUnsafe(
+            `UPDATE plugin_hw_submissions SET status = 'GRADING_FAILED' WHERE id = $1`,
+            submission.id,
+          );
+          return;
+        }
 
         // 解析 AI 返回结果
         let gradingResult: any = { totalScore: 0, details: [], feedback: '' };
@@ -152,6 +163,78 @@ const aiGradingPlugin: EduPlugin = {
       ) as any[];
 
       return results[0] || { error: '暂无批改结果' };
+    });
+
+    // 获取错题列表
+    ctx.registerRoute('GET', '/mistakes', async (request: any) => {
+      const user = (request as any).user;
+      if (!user?.userId) {
+        throw { statusCode: 401, message: '未登录' };
+      }
+      const { subjectId } = request.query as any;
+
+      // 1. 获取该学生的所有批改结果
+      let query = `
+        SELECT r.details, r.feedback, r.created_at as graded_at,
+               s.answers, a.question_ids
+        FROM plugin_ag_results r
+        JOIN plugin_hw_submissions s ON s.id = r.submission_id
+        JOIN plugin_hw_assignments a ON a.id = s.assignment_id
+        WHERE s.student_id = $1
+      `;
+      const params: any[] = [user.userId];
+      if (subjectId) {
+        params.push(subjectId);
+        query += ` AND a.subject_id = $${params.length}`;
+      }
+      query += ` ORDER BY r.created_at DESC`;
+
+      const rows = await ctx.prisma.$queryRawUnsafe(query, ...params) as any[];
+
+      // 2. 提取所有错题的 questionId
+      const mistakeItems: { questionId: string; studentAnswer: string; comment: string; feedback: string; gradedAt: string }[] = [];
+      for (const row of rows) {
+        const details = typeof row.details === 'string' ? JSON.parse(row.details) : (row.details || []);
+        const answers = typeof row.answers === 'string' ? JSON.parse(row.answers) : (row.answers || {});
+        for (const d of details) {
+          if (!d.correct) {
+            mistakeItems.push({
+              questionId: d.questionId,
+              studentAnswer: answers[d.questionId] ?? '',
+              comment: d.comment || '',
+              feedback: row.feedback || '',
+              gradedAt: row.graded_at,
+            });
+          }
+        }
+      }
+
+      if (!mistakeItems.length) return [];
+
+      // 3. 批量获取题目详情
+      const qIds = [...new Set(mistakeItems.map(m => m.questionId))];
+      const ph = qIds.map((_, i) => `$${i + 1}`).join(',');
+      const questions = await ctx.prisma.$queryRawUnsafe(
+        `SELECT id, content, options, answer, type FROM plugin_qb_questions WHERE id IN (${ph})`,
+        ...qIds
+      ) as any[];
+      const qMap = Object.fromEntries(questions.map(q => [q.id, q]));
+
+      // 4. 组装返回
+      return mistakeItems.map(m => {
+        const q = qMap[m.questionId];
+        return {
+          questionId: m.questionId,
+          content: q?.content || '',
+          type: q?.type || '',
+          options: q?.options || null,
+          correctAnswer: q?.answer || '',
+          studentAnswer: m.studentAnswer,
+          aiComment: m.comment,
+          feedback: m.feedback,
+          gradedAt: m.gradedAt,
+        };
+      });
     });
 
     ctx.logger.info('AI 批改插件已就绪，正在监听作业提交事件');

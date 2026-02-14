@@ -43,11 +43,14 @@ export default function AISettingsPage() {
     setTesting(true);
     setTestResult('');
     try {
-      // 通过健康检查验证连接（简化版，实际应调用 AI 接口测试）
-      await apiFetch('/api/health');
-      setTestResult('✅ 服务连接正常');
-    } catch {
-      setTestResult('❌ 连接失败');
+      const res = await apiFetch('/api/ai/test', { method: 'POST' });
+      if (res.success) {
+        setTestResult(`✅ 连接成功 | 模型: ${res.model} | 响应时间: ${res.responseTime}ms`);
+      } else {
+        setTestResult(`❌ 连接失败: ${res.error}`);
+      }
+    } catch (err: any) {
+      setTestResult(`❌ 请求失败: ${err.message}`);
     }
     setTesting(false);
   }

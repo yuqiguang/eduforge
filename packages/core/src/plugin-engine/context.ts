@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { EventBus } from '../event-bus/index.js';
 import { AIGateway } from '../ai-gateway/index.js';
+import { authMiddleware } from '../auth/middleware.js';
 import type { PluginContext } from './types.js';
 
 // 创建插件上下文实例
@@ -15,7 +16,13 @@ export function createPluginContext(
   return {
     registerRoute(method, path, handler, options) {
       const fullPath = `/api/plugins/${pluginName}${path}`;
-      app.route({ method, url: fullPath, handler, ...options });
+      app.route({
+        method,
+        url: fullPath,
+        preHandler: [authMiddleware],
+        handler,
+        ...options,
+      });
     },
     events: eventBus,
     ai: aiGateway,

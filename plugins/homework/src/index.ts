@@ -37,10 +37,29 @@ const homeworkPlugin: EduPlugin = {
   },
 
   async onInit(ctx: PluginContext) {
+    // 获取当前学生的提交记录
+    ctx.registerRoute('GET', '/my-submissions', async (request: any) => {
+      const user = (request as any).user;
+      if (!user?.userId) {
+        throw { statusCode: 401, message: '未登录' };
+      }
+      return ctx.prisma.$queryRawUnsafe(
+        `SELECT s.*, a.title as assignment_title, a.subject_id, a.deadline, a.question_ids
+         FROM plugin_hw_submissions s
+         JOIN plugin_hw_assignments a ON a.id = s.assignment_id
+         WHERE s.student_id = $1
+         ORDER BY s.submitted_at DESC`,
+        user.userId
+      );
+    });
+
     // 布置作业
     ctx.registerRoute('POST', '/assignments', async (request: any) => {
       const body = request.body as any;
       const user = (request as any).user;
+      if (!user?.userId) {
+        throw { statusCode: 401, message: '未登录' };
+      }
 
       const result = await ctx.prisma.$queryRawUnsafe(
         `INSERT INTO plugin_hw_assignments (title, description, class_id, teacher_id, subject_id, question_ids, deadline)
@@ -81,6 +100,9 @@ const homeworkPlugin: EduPlugin = {
     ctx.registerRoute('POST', '/submissions', async (request: any) => {
       const body = request.body as any;
       const user = (request as any).user;
+      if (!user?.userId) {
+        throw { statusCode: 401, message: '未登录' };
+      }
 
       const result = await ctx.prisma.$queryRawUnsafe(
         `INSERT INTO plugin_hw_submissions (assignment_id, student_id, answers)

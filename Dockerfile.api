@@ -1,0 +1,54 @@
+# ---- Stage 1: Dependencies ----
+FROM node:22-alpine AS deps
+RUN corepack enable && corepack prepare pnpm@latest --activate
+WORKDIR /app
+
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json ./
+COPY packages/core/package.json packages/core/
+COPY packages/sdk/package.json packages/sdk/
+COPY plugins/question-bank/package.json plugins/question-bank/
+COPY plugins/homework/package.json plugins/homework/
+COPY plugins/ai-grading/package.json plugins/ai-grading/
+
+RUN pnpm install --frozen-lockfile
+
+# ---- Stage 2: Build ----
+FROM deps AS build
+COPY packages/core/ packages/core/
+COPY packages/sdk/ packages/sdk/
+COPY plugins/ plugins/
+COPY tsconfig.base.json ./
+
+# Generate Prisma client
+RUN pnpm --filter @eduforge/core db:generate
+
+# Build SDK, plugins, then core
+RUN pnpm -r build
+
+# ---- Stage 3: Production ----
+FROM node:22-alpine AS production
+RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN apk add --no-cache postgresql-client
+WORKDIR /app
+
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY packages/core/package.json packages/core/
+COPY packages/sdk/package.json packages/sdk/
+COPY plugins/question-bank/package.json plugins/question-bank/
+COPY plugins/homework/package.json plugins/homework/
+COPY plugins/ai-grading/package.json plugins/ai-grading/
+
+RUN pnpm install --frozen-lockfile --prod
+
+COPY --from=build /app/packages/core/dist/ packages/core/dist/
+COPY --from=build /app/packages/core/prisma/ packages/core/prisma/
+COPY --from=build /app/packages/sdk/dist/ packages/sdk/dist/
+COPY --from=build /app/plugins/ plugins/
+COPY --from=build /app/node_modules/.pnpm/*prisma*/ node_modules/.pnpm/ 2>/dev/null || true
+COPY --from=build /app/packages/core/node_modules/.prisma/ packages/core/node_modules/.prisma/
+
+COPY scripts/start-api.sh /app/scripts/start-api.sh
+RUN chmod +x /app/scripts/start-api.sh
+
+EXPOSE 3001
+CMD ["/app/scripts/start-api.sh"]

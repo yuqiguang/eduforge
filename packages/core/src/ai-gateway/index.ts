@@ -95,4 +95,30 @@ export function registerAIRoutes(app: FastifyInstance, prisma: PrismaClient) {
     });
     return config;
   });
+
+  // AI 连接测试
+  app.post('/api/ai/test', { preHandler: [authMiddleware] }, async (request, reply) => {
+    const user = (request as any).user;
+    if (!['ADMIN', 'TEACHER', 'SUPER_ADMIN'].includes(user.role)) {
+      return reply.code(403).send({ error: '权限不足' });
+    }
+    const gateway = new AIGateway(prisma);
+    const start = Date.now();
+    try {
+      const result = await gateway.complete({
+        task: 'test',
+        messages: [
+          { role: 'system', content: '你是测试助手。' },
+          { role: 'user', content: '请回复OK' },
+        ],
+        maxTokens: 16,
+        userId: user.userId,
+        schoolId: user.schoolId,
+        plugin: 'system-test',
+      });
+      return { success: true, model: result.model, responseTime: Date.now() - start };
+    } catch (err: any) {
+      return { success: false, error: err.message, responseTime: Date.now() - start };
+    }
+  });
 }

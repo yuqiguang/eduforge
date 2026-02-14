@@ -15,10 +15,19 @@ type Assignment = {
   created_at: string;
 };
 
+type Submission = {
+  id: string;
+  student_name?: string;
+  status: string;
+  score: number | null;
+  submitted_at: string;
+};
+
 export default function AssignmentsPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [viewingId, setViewingId] = useState<string | null>(null);
 
   async function loadAssignments() {
     setLoading(true);
@@ -30,6 +39,11 @@ export default function AssignmentsPage() {
   }
 
   useEffect(() => { loadAssignments(); }, []);
+
+  if (viewingId) {
+    const a = assignments.find(x => x.id === viewingId);
+    return <SubmissionsView assignment={a!} onBack={() => setViewingId(null)} />;
+  }
 
   return (
     <div>
@@ -54,7 +68,7 @@ export default function AssignmentsPage() {
       ) : (
         <div className="space-y-3">
           {assignments.map(a => (
-            <div key={a.id} className="bg-white rounded-xl border p-5 hover:shadow-sm transition">
+            <div key={a.id} className="bg-white rounded-xl border p-5 hover:shadow-sm transition cursor-pointer" onClick={() => setViewingId(a.id)}>
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-medium text-gray-800">{a.title}</h3>
@@ -65,9 +79,12 @@ export default function AssignmentsPage() {
                     <span>📅 {new Date(a.created_at).toLocaleDateString('zh-CN')}</span>
                   </div>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full ${a.status === 'ACTIVE' ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-500'}`}>
-                  {a.status === 'ACTIVE' ? '进行中' : a.status}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className={`text-xs px-2 py-1 rounded-full ${a.status === 'ACTIVE' ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-500'}`}>
+                    {a.status === 'ACTIVE' ? '进行中' : a.status}
+                  </span>
+                  <span className="text-gray-300 text-sm">›</span>
+                </div>
               </div>
             </div>
           ))}
@@ -79,19 +96,86 @@ export default function AssignmentsPage() {
   );
 }
 
+function SubmissionsView({ assignment, onBack }: { assignment: Assignment; onBack: () => void }) {
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiFetch(`/api/plugins/homework/submissions?assignmentId=${assignment.id}`)
+      .then(data => setSubmissions(Array.isArray(data) ? data : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [assignment.id]);
+
+  return (
+    <div>
+      <button onClick={onBack} className="text-sm text-blue-600 hover:underline mb-4">← 返回作业列表</button>
+      <h1 className="text-2xl font-bold mb-1">{assignment.title}</h1>
+      <p className="text-gray-500 text-sm mb-6">
+        {assignment.question_ids?.length || 0} 道题 · 
+        {assignment.deadline ? ` 截止: ${new Date(assignment.deadline).toLocaleString('zh-CN')}` : ' 无截止时间'}
+      </p>
+
+      <div className="bg-white rounded-xl border">
+        <div className="px-5 py-3 border-b">
+          <h2 className="font-medium">提交情况 ({submissions.length} 份)</h2>
+        </div>
+        {loading ? (
+          <div className="p-8 text-center text-gray-400">加载中...</div>
+        ) : submissions.length === 0 ? (
+          <div className="p-8 text-center text-gray-400">暂无提交</div>
+        ) : (
+          <div className="divide-y">
+            {submissions.map(s => (
+              <div key={s.id} className="px-5 py-3 flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-medium text-gray-800">{s.student_name || '学生'}</span>
+                  <span className="text-xs text-gray-400 ml-3">{new Date(s.submitted_at).toLocaleString('zh-CN')}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {s.score !== null && s.score !== undefined && (
+                    <span className="text-sm font-bold text-blue-600">{s.score}分</span>
+                  )}
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    s.status === 'GRADED' ? 'bg-green-50 text-green-600' :
+                    s.status === 'SUBMITTED' ? 'bg-yellow-50 text-yellow-600' :
+                    'bg-gray-50 text-gray-500'
+                  }`}>
+                    {s.status === 'GRADED' ? '已批改' : s.status === 'SUBMITTED' ? '待批改' : s.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function CreateAssignmentModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [deadline, setDeadline] = useState('');
+  const [classId, setClassId] = useState('');
+  const [subjectFilter, setSubjectFilter] = useState('');
   const [loading, setLoading] = useState(false);
   const [questions, setQuestions] = useState<any[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
+  const [classes, setClasses] = useState<any[]>([]);
+  const [subjects, setSubjects] = useState<any[]>([]);
 
   useEffect(() => {
-    apiFetch('/api/plugins/question-bank/questions?pageSize=50')
+    apiFetch('/api/plugins/question-bank/questions?pageSize=100')
       .then(data => setQuestions(data.data || []))
       .catch(() => {});
+    apiFetch('/api/classes').then(data => setClasses(Array.isArray(data) ? data : [])).catch(() => {});
+    apiFetch('/api/subjects').then(data => setSubjects(Array.isArray(data) ? data : [])).catch(() => {});
   }, []);
+
+  const filteredQuestions = subjectFilter
+    ? questions.filter(q => q.subject_id === subjectFilter || q.subjectId === subjectFilter)
+    : questions;
 
   function toggleQuestion(id: string) {
     setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -106,8 +190,8 @@ function CreateAssignmentModal({ onClose, onCreated }: { onClose: () => void; on
         method: 'POST',
         body: JSON.stringify({
           title, description,
-          classId: 'default',
-          subjectId: 'math',
+          classId: classId || 'default',
+          subjectId: subjectFilter || 'general',
           questionIds: selected,
           deadline: deadline || undefined,
         }),
@@ -135,22 +219,46 @@ function CreateAssignmentModal({ onClose, onCreated }: { onClose: () => void; on
             <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
               className="w-full px-3 py-2 border rounded-lg" placeholder="作业要求..." />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">截止时间（可选）</label>
-            <input type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg" />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">选择班级</label>
+              <select value={classId} onChange={e => setClassId(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg bg-white">
+                <option value="">全部班级</option>
+                {classes.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">截止时间（可选）</label>
+              <input type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg" />
+            </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">选择题目 (已选 {selected.length} 道)</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-sm font-medium text-gray-700">选择题目 (已选 {selected.length} 道)</label>
+              <select value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)}
+                className="text-sm px-2 py-1 border rounded-lg bg-white">
+                <option value="">全部学科</option>
+                {subjects.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
             <div className="border rounded-lg max-h-60 overflow-y-auto">
-              {questions.length === 0 ? (
-                <p className="p-4 text-center text-gray-400">题库为空，请先添加题目</p>
-              ) : questions.map(q => (
+              {filteredQuestions.length === 0 ? (
+                <p className="p-4 text-center text-gray-400">
+                  {questions.length === 0 ? '题库为空，请先添加题目' : '该学科下没有题目'}
+                </p>
+              ) : filteredQuestions.map(q => (
                 <div key={q.id} onClick={() => toggleQuestion(q.id)}
                   className={`p-3 border-b cursor-pointer hover:bg-gray-50 ${selected.includes(q.id) ? 'bg-blue-50' : ''}`}>
                   <div className="flex items-center gap-2">
                     <input type="checkbox" checked={selected.includes(q.id)} readOnly className="rounded" />
-                    <span className="text-sm">{q.content}</span>
+                    <span className="text-sm flex-1">{q.content}</span>
+                    <span className="text-xs text-gray-400">{q.type === 'CHOICE' ? '选择题' : q.type === 'FILL' ? '填空题' : '问答题'}</span>
                   </div>
                 </div>
               ))}
