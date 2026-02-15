@@ -31,6 +31,48 @@ const PROVIDER_URLS: Record<string, string> = {
   ollama: 'http://localhost:11434/v1',
 };
 
+// Tool-calling + streaming support
+export interface AIToolCallOptions {
+  provider: string;
+  model: string;
+  apiKey: string;
+  baseUrl?: string;
+  messages: any[];
+  tools?: any[];
+  temperature?: number;
+  maxTokens?: number;
+  stream?: boolean;
+}
+
+export async function openaiChatWithTools(options: AIToolCallOptions): Promise<Response> {
+  const baseUrl = options.baseUrl || PROVIDER_URLS[options.provider] || PROVIDER_URLS.openai;
+
+  const body: any = {
+    model: options.model,
+    messages: options.messages,
+    temperature: options.temperature ?? 0.7,
+    max_tokens: options.maxTokens,
+  };
+  if (options.tools?.length) body.tools = options.tools;
+  if (options.stream) body.stream = true;
+
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${options.apiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`AI 请求失败 (${response.status}): ${error}`);
+  }
+
+  return response;
+}
+
 export async function openaiComplete(options: AICompletionOptions): Promise<AICompletionResult> {
   const baseUrl = options.baseUrl || PROVIDER_URLS[options.provider] || PROVIDER_URLS.openai;
 

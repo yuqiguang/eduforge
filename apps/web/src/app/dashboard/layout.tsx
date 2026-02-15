@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 
 const teacherNav = [
   { href: '/dashboard', label: '概览', icon: '📊' },
+  { href: '/dashboard/chat', label: 'AI 助手', icon: '🤖' },
   { href: '/dashboard/questions', label: '题库', icon: '📚' },
   { href: '/dashboard/assignments', label: '作业', icon: '📋' },
   { href: '/dashboard/classes', label: '班级', icon: '👥' },
@@ -15,6 +16,7 @@ const teacherNav = [
 
 const studentNav = [
   { href: '/dashboard', label: '概览', icon: '📊' },
+  { href: '/dashboard/chat', label: 'AI 助手', icon: '🤖' },
   { href: '/dashboard/my-assignments', label: '我的作业', icon: '📋' },
   { href: '/dashboard/mistakes', label: '错题本', icon: '❌' },
   { href: '/dashboard/progress', label: '学习进度', icon: '📈' },

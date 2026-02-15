@@ -7,6 +7,7 @@ import { AIGateway, registerAIRoutes } from './ai-gateway/index.js';
 import { PluginLoader } from './plugin-engine/index.js';
 import { registerAuthRoutes } from './auth/routes.js';
 import { registerOrgRoutes } from './org/routes.js';
+import { registerAgentRoutes } from './agent/index.js';
 
 async function main() {
   const config = loadConfig();
@@ -39,6 +40,7 @@ async function main() {
   registerAuthRoutes(app, prisma);
   registerOrgRoutes(app, prisma);
   registerAIRoutes(app, prisma);
+  registerAgentRoutes(app, prisma);
 
   // 插件加载器
   const pluginLoader = new PluginLoader(app, prisma, eventBus, aiGateway);
