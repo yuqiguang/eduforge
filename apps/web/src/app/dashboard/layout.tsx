@@ -84,7 +84,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {sidebarOpen && <div className="fixed inset-0 bg-black/20 z-10 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
       {/* 主内容 */}
-      <main className="lg:ml-56 mt-14 p-6">{children}</main>
+      <main className="lg:ml-56 mt-14 p-4 sm:p-6">{children}</main>
     </div>
   );
 }

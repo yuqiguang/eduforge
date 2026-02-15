@@ -71,7 +71,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* 概览卡片 */}
-      <div className="grid sm:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         <div className="bg-white rounded-xl border p-5">
           <p className="text-sm text-gray-500">学生人数</p>
           <p className="text-3xl font-bold text-blue-600 mt-1">{currentClass?.students?.length || 0}</p>

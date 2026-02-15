@@ -44,7 +44,7 @@ export default function QuestionsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
         <div>
           <h1 className="text-2xl font-bold">题库管理</h1>
           <p className="text-gray-500 text-sm mt-1">共 {total} 道题目</p>
@@ -248,7 +248,7 @@ function AIGenerateModal({ onClose, onCreated }: { onClose: () => void; onCreate
             <input value={knowledgePoint} onChange={e => setKnowledgePoint(e.target.value)}
               className="w-full px-3 py-2 border rounded-lg" placeholder="如: 一元二次方程、现在完成时..." />
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">题型</label>
               <select value={type} onChange={e => setType(e.target.value)} className="w-full px-3 py-2 border rounded-lg">

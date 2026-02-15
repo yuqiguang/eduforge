@@ -219,7 +219,7 @@ function CreateAssignmentModal({ onClose, onCreated }: { onClose: () => void; on
             <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
               className="w-full px-3 py-2 border rounded-lg" placeholder="作业要求..." />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">选择班级</label>
               <select value={classId} onChange={e => setClassId(e.target.value)}

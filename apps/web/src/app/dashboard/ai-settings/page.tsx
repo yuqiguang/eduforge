@@ -68,7 +68,7 @@ export default function AISettingsPage() {
             {PROVIDERS.map(p => (
               <button key={p.id} onClick={() => { setProvider(p.id); setModel(p.models[0]); }}
                 className={`p-3 rounded-lg border-2 text-left transition ${provider === p.id ? 'border-blue-600 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                <div className="font-medium text-sm">{p.name}</div>
+                <div className="font-medium text-sm truncate">{p.name}</div>
                 <div className="text-xs text-gray-400 mt-0.5">{p.models.length} 个模型</div>
               </button>
             ))}

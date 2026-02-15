@@ -62,9 +62,9 @@ export default function ProgressPage() {
             {Object.entries(bySubject).map(([subj, data]) => {
               const avg = data.graded ? Math.round(data.totalScore / data.graded) : 0;
               return (
-                <div key={subj} className="flex items-center justify-between py-2 border-b last:border-0">
+                <div key={subj} className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b last:border-0 gap-1">
                   <span className="font-medium text-gray-700">{subj}</span>
-                  <div className="flex items-center gap-6 text-sm">
+                  <div className="flex items-center gap-4 sm:gap-6 text-sm">
                     <span className="text-gray-400">作业 {data.count} 次</span>
                     <span className="text-gray-400">已批改 {data.graded} 次</span>
                     <span className="font-bold text-blue-600">{avg} 分</span>

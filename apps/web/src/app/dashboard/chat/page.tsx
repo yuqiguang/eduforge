@@ -228,8 +228,8 @@ export default function ChatPage() {
 
   // ── Render ───────────────────────────────────────────
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] -m-6 overflow-hidden">
-      {/* Sidebar */}
+    <div className="flex h-[calc(100vh-3.5rem)] -m-4 sm:-m-6 overflow-hidden">
+      {/* Sidebar - desktop inline, mobile overlay */}
       <div className={`${sidebarOpen ? 'w-64' : 'w-0'} transition-all duration-200 overflow-hidden border-r bg-white flex-shrink-0 hidden md:block`}>
         <div className="w-64 h-full flex flex-col">
           <div className="p-3 border-b">
@@ -240,7 +240,7 @@ export default function ChatPage() {
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {sessions.map(s => (
-              <button key={s.id} onClick={() => { setActiveId(s.id); }}
+              <button key={s.id} onClick={() => { setActiveId(s.id); setSidebarOpen(false); }}
                 className={`w-full text-left px-3 py-2 rounded-lg text-sm truncate transition ${activeId === s.id ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>
                 <div className="truncate">{s.title || '新对话'}</div>
                 <div className="text-xs text-gray-400 mt-0.5">{new Date(s.updatedAt).toLocaleDateString()}</div>
@@ -250,15 +250,48 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* Toggle sidebar button */}
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div className="md:hidden fixed inset-0 z-30 flex">
+          <div className="w-64 bg-white border-r h-full flex flex-col shadow-lg">
+            <div className="p-3 border-b flex items-center justify-between">
+              <button onClick={newChat}
+                className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition">
+                ＋ 新对话
+              </button>
+              <button onClick={() => setSidebarOpen(false)} className="ml-2 p-2 text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {sessions.map(s => (
+                <button key={s.id} onClick={() => { setActiveId(s.id); setSidebarOpen(false); }}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm truncate transition ${activeId === s.id ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>
+                  <div className="truncate">{s.title || '新对话'}</div>
+                  <div className="text-xs text-gray-400 mt-0.5">{new Date(s.updatedAt).toLocaleDateString()}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex-1 bg-black/20" onClick={() => setSidebarOpen(false)} />
+        </div>
+      )}
+
+      {/* Toggle sidebar button (desktop) */}
       <button onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="hidden md:flex absolute left-[calc(14rem-1px)] top-1/2 z-10 w-5 h-10 items-center justify-center bg-white border rounded-r text-gray-400 hover:text-gray-600"
+        className="hidden md:flex absolute top-1/2 z-10 w-5 h-10 items-center justify-center bg-white border rounded-r text-gray-400 hover:text-gray-600"
         style={{ left: sidebarOpen ? 'calc(16rem - 10px)' : 0 }}>
         {sidebarOpen ? '‹' : '›'}
       </button>
 
       {/* Main chat area */}
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Mobile header */}
+        <div className="md:hidden flex items-center gap-2 px-3 py-2 border-b bg-white">
+          <button onClick={() => setSidebarOpen(true)} className="p-2 text-gray-500 hover:text-gray-700">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+          </button>
+          <span className="text-sm text-gray-600 truncate">{activeId ? sessions.find(s => s.id === activeId)?.title || '对话' : 'AI 助手'}</span>
+          <button onClick={newChat} className="ml-auto text-sm text-blue-600 font-medium px-2 py-1">+ 新对话</button>
+        </div>
         {/* Empty state */}
         {!activeId && messages.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
