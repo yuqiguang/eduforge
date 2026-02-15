@@ -5,6 +5,7 @@ export interface TokenPayload {
   userId: string;
   email?: string;
   role: string;
+  schoolId?: string;
 }
 
 export function signToken(payload: TokenPayload): string {

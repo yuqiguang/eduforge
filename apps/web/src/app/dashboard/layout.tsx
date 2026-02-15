@@ -22,6 +22,14 @@ const studentNav = [
   { href: '/dashboard/progress', label: '学习进度', icon: '📈' },
 ];
 
+const adminNav = [
+  { href: '/dashboard', label: '概览', icon: '📊' },
+  { href: '/dashboard/chat', label: 'AI 助手', icon: '🤖' },
+  { href: '/dashboard/school', label: '学校管理', icon: '🏫' },
+  { href: '/dashboard/classes', label: '班级管理', icon: '👥' },
+  { href: '/dashboard/ai-settings', label: 'AI 设置', icon: '⚙️' },
+];
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -39,7 +47,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!user) return null;
 
-  const nav = user.role === 'STUDENT' ? studentNav : teacherNav;
+  const nav = user.role === 'STUDENT' ? studentNav : user.role === 'ADMIN' ? adminNav : teacherNav;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -57,7 +65,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-600">{user.name}</span>
           <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-600 font-medium">
-            {user.role === 'TEACHER' ? '教师' : user.role === 'STUDENT' ? '学生' : '管理员'}
+            {user.role === 'TEACHER' ? '教师' : user.role === 'STUDENT' ? '学生' : user.role === 'ADMIN' ? '机构管理员' : '管理员'}
           </span>
           <button onClick={() => { localStorage.clear(); router.push('/login'); }}
             className="text-sm text-gray-400 hover:text-gray-600">退出</button>

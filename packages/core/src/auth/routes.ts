@@ -22,8 +22,21 @@ const registerSchema = z.object({
   name: z.string().min(2, '姓名至少2个字符'),
   email: z.string().email('请输入有效邮箱'),
   password: z.string().min(6, '密码至少6个字符'),
-  role: z.enum(['TEACHER', 'STUDENT']).default('STUDENT'),
-});
+  role: z.enum(['TEACHER', 'STUDENT', 'ADMIN']).default('STUDENT'),
+  schoolName: z.string().min(2, '机构名称至少2个字符').optional(),
+}).refine(
+  (data) => data.role !== 'ADMIN' || (data.schoolName && data.schoolName.length >= 2),
+  { message: '机构注册必须填写机构名称', path: ['schoolName'] },
+);
+
+function generateSchoolCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
 
 export function registerAuthRoutes(app: FastifyInstance, prisma: PrismaClient, eventBus?: EventBus) {
   // 登录
@@ -54,9 +67,9 @@ export function registerAuthRoutes(app: FastifyInstance, prisma: PrismaClient, e
       data: { lastLoginAt: new Date() },
     });
 
-    const token = signToken({ userId: user.id, email: user.email ?? undefined, role: user.role });
+    const token = signToken({ userId: user.id, email: user.email ?? undefined, role: user.role, schoolId: user.schoolId ?? undefined });
     reply.setCookie('token', token, COOKIE_OPTIONS);
-    return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+    return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role, schoolId: user.schoolId } };
   });
 
   // 注册
@@ -73,21 +86,42 @@ export function registerAuthRoutes(app: FastifyInstance, prisma: PrismaClient, e
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
+
+    let schoolId: string | undefined;
+
+    if (role === 'ADMIN') {
+      // 单机构模式：系统中只允许一个学校
+      const existingSchool = await prisma.school.findFirst();
+      if (existingSchool) {
+        return reply.code(409).send({ error: '系统已有机构注册，请联系管理员获取账号' });
+      }
+
+      const schoolName = result.data.schoolName!;
+      let code = generateSchoolCode();
+      while (await prisma.school.findUnique({ where: { code } })) {
+        code = generateSchoolCode();
+      }
+      const school = await prisma.school.create({
+        data: { name: schoolName, code },
+      });
+      schoolId = school.id;
+    }
+
     const user = await prisma.user.create({
-      data: { name, email, passwordHash, role },
+      data: { name, email, passwordHash, role, schoolId },
     });
 
     if (role === 'TEACHER') {
       await prisma.teacher.create({ data: { userId: user.id } });
-    } else {
+    } else if (role === 'STUDENT') {
       await prisma.student.create({ data: { userId: user.id } });
     }
 
     eventBus?.emit('user:created', { userId: user.id, name: user.name, role: user.role });
 
-    const token = signToken({ userId: user.id, email: user.email ?? undefined, role: user.role });
+    const token = signToken({ userId: user.id, email: user.email ?? undefined, role: user.role, schoolId: user.schoolId ?? undefined });
     reply.setCookie('token', token, COOKIE_OPTIONS);
-    return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+    return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role, schoolId: user.schoolId } };
   });
 
   // 获取当前用户
@@ -109,5 +143,11 @@ export function registerAuthRoutes(app: FastifyInstance, prisma: PrismaClient, e
   app.post('/api/auth/logout', async (request, reply) => {
     reply.clearCookie('token', { path: '/' });
     return { success: true };
+  });
+
+  // 检查是否允许注册机构（单机构模式）
+  app.get('/api/auth/admin-available', async () => {
+    const count = await prisma.school.count();
+    return { available: count === 0 };
   });
 }

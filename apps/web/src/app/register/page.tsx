@@ -1,18 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
+
+type RoleType = 'TEACHER' | 'STUDENT' | 'ADMIN';
 
 export default function RegisterPage() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'TEACHER' | 'STUDENT'>('TEACHER');
+  const [role, setRole] = useState<RoleType>('TEACHER');
+  const [schoolName, setSchoolName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [adminAvailable, setAdminAvailable] = useState(false);
+
+  useEffect(() => {
+    apiFetch('/api/auth/admin-available')
+      .then((data) => setAdminAvailable(data.available))
+      .catch(() => {});
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,9 +30,13 @@ export default function RegisterPage() {
     setError('');
 
     try {
+      const body: Record<string, string> = { name, email, password, role };
+      if (role === 'ADMIN') {
+        body.schoolName = schoolName;
+      }
       const data = await apiFetch('/api/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ name, email, password, role }),
+        body: JSON.stringify(body),
       });
       localStorage.setItem('user', JSON.stringify(data.user));
       router.push('/dashboard');
@@ -48,19 +62,33 @@ export default function RegisterPage() {
           {error && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm">{error}</div>}
 
           {/* 角色选择 */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className={`grid gap-3 ${adminAvailable ? 'grid-cols-3' : 'grid-cols-2'}`}>
             <button type="button" onClick={() => setRole('TEACHER')}
-              className={`py-3 rounded-xl font-medium border-2 transition ${role === 'TEACHER' ? 'border-blue-600 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-500'}`}>
-              👩‍🏫 我是教师
+              className={`py-3 rounded-xl font-medium border-2 transition text-sm ${role === 'TEACHER' ? 'border-blue-600 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-500'}`}>
+              <span className="block text-lg mb-1">👩‍🏫</span>我是教师
             </button>
             <button type="button" onClick={() => setRole('STUDENT')}
-              className={`py-3 rounded-xl font-medium border-2 transition ${role === 'STUDENT' ? 'border-green-600 bg-green-50 text-green-600' : 'border-gray-200 text-gray-500'}`}>
-              👨‍🎓 我是学生
+              className={`py-3 rounded-xl font-medium border-2 transition text-sm ${role === 'STUDENT' ? 'border-green-600 bg-green-50 text-green-600' : 'border-gray-200 text-gray-500'}`}>
+              <span className="block text-lg mb-1">👨‍🎓</span>我是学生
             </button>
+            {adminAvailable && (
+              <button type="button" onClick={() => setRole('ADMIN')}
+                className={`py-3 rounded-xl font-medium border-2 transition text-sm ${role === 'ADMIN' ? 'border-purple-600 bg-purple-50 text-purple-600' : 'border-gray-200 text-gray-500'}`}>
+                <span className="block text-lg mb-1">🏫</span>我是机构
+              </button>
+            )}
           </div>
 
+          {role === 'ADMIN' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">机构名称</label>
+              <input type="text" required value={schoolName} onChange={e => setSchoolName(e.target.value)}
+                className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500" placeholder="学校或机构名称" />
+            </div>
+          )}
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">姓名</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{role === 'ADMIN' ? '管理员姓名' : '姓名'}</label>
             <input type="text" required value={name} onChange={e => setName(e.target.value)}
               className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="你的名字" />
           </div>
