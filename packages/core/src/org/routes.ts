@@ -1,8 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware, requireRole } from '../auth/middleware.js';
+import type { EventBus } from '../event-bus/index.js';
 
-export function registerOrgRoutes(app: FastifyInstance, prisma: PrismaClient) {
+export function registerOrgRoutes(app: FastifyInstance, prisma: PrismaClient, eventBus?: EventBus) {
   // 学校列表
   app.get('/api/schools', { preHandler: [authMiddleware] }, async () => {
     return prisma.school.findMany({ orderBy: { createdAt: 'desc' } });
@@ -45,6 +46,7 @@ export function registerOrgRoutes(app: FastifyInstance, prisma: PrismaClient) {
       },
       include: { grade: true, students: { select: { studentId: true } } },
     });
+    eventBus?.emit('class:created', { classId: cls.id, name: cls.name, gradeId: cls.gradeId });
     return cls;
   });
 
@@ -57,7 +59,7 @@ export function registerOrgRoutes(app: FastifyInstance, prisma: PrismaClient) {
         student: { include: { user: { select: { id: true, name: true, email: true } } } },
       },
     });
-    return classStudents.map(cs => ({
+    return classStudents.map((cs: any) => ({
       studentId: cs.studentId,
       ...cs.student.user,
     }));

@@ -1,4 +1,4 @@
-import type { EduPlugin, PluginContext } from '../../packages/core/src/plugin-engine/types.js';
+import type { EduPlugin, PluginContext } from '@eduforge/sdk';
 
 // AI 批改插件 - 监听作业提交，自动批改
 const aiGradingPlugin: EduPlugin = {
@@ -141,7 +141,7 @@ const aiGradingPlugin: EduPlugin = {
       }
     });
 
-    // 手动触发批改
+    // 手动触发批改（仅教师/管理员）
     ctx.registerRoute('POST', '/grade/:submissionId', async (request: any) => {
       const { submissionId } = request.params as any;
       const submissions = await ctx.prisma.$queryRawUnsafe(
@@ -152,7 +152,7 @@ const aiGradingPlugin: EduPlugin = {
 
       ctx.events.emit('homework:submitted', submissions[0]);
       return { message: '批改任务已提交' };
-    });
+    }, { roles: ['TEACHER', 'ADMIN', 'SUPER_ADMIN'] });
 
     // 获取批改结果
     ctx.registerRoute('GET', '/results/:submissionId', async (request: any) => {

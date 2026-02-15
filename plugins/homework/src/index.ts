@@ -1,4 +1,4 @@
-import type { EduPlugin, PluginContext } from '../../packages/core/src/plugin-engine/types.js';
+import type { EduPlugin, PluginContext } from '@eduforge/sdk';
 
 // 作业插件 - 作业布置、提交、管理
 const homeworkPlugin: EduPlugin = {
@@ -53,7 +53,7 @@ const homeworkPlugin: EduPlugin = {
       );
     });
 
-    // 布置作业
+    // 布置作业（仅教师/管理员）
     ctx.registerRoute('POST', '/assignments', async (request: any) => {
       const body = request.body as any;
       const user = (request as any).user;
@@ -77,7 +77,7 @@ const homeworkPlugin: EduPlugin = {
       const assignment = (result as any)[0];
       ctx.events.emit('homework:assigned', assignment);
       return assignment;
-    });
+    }, { roles: ['TEACHER', 'ADMIN', 'SUPER_ADMIN'] });
 
     // 获取作业列表
     ctx.registerRoute('GET', '/assignments', async (request: any) => {

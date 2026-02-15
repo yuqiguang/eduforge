@@ -1,8 +1,9 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { openaiChatWithTools } from '../ai-gateway/providers/openai.js';
 import { getToolsAsOpenAIFormat, executeTool, getTool, type ToolContext } from './tool-registry.js';
 import { createSession, getSession, saveMessage, loadMessages } from './session.js';
 import { canUseTool } from './permissions.js';
+import { decrypt } from '../crypto.js';
 
 function buildSystemPrompt(user: { name?: string; role: string }) {
   const name = user.name || '用户';
@@ -21,14 +22,14 @@ function buildSystemPrompt(user: { name?: string; role: string }) {
 async function getAIConfig(prisma: PrismaClient, schoolId?: string) {
   let config: any = null;
   if (schoolId) {
-    const rows: any[] = await prisma.$queryRawUnsafe(
-      `SELECT * FROM "AIConfig" WHERE "schoolId" = $1 LIMIT 1`, schoolId
+    const rows: any[] = await prisma.$queryRaw(
+      Prisma.sql`SELECT * FROM "AIConfig" WHERE "schoolId" = ${schoolId} LIMIT 1`
     );
     config = rows[0];
   }
   if (!config) {
-    const rows: any[] = await prisma.$queryRawUnsafe(
-      `SELECT * FROM "AIConfig" WHERE "isDefault" = true LIMIT 1`
+    const rows: any[] = await prisma.$queryRaw(
+      Prisma.sql`SELECT * FROM "AIConfig" WHERE "isDefault" = true LIMIT 1`
     );
     config = rows[0];
   }
@@ -87,7 +88,7 @@ export async function chat(
     const resp = await openaiChatWithTools({
       provider: config.provider,
       model: config.model,
-      apiKey: config.apiKey,
+      apiKey: decrypt(config.apiKey),
       baseUrl: config.baseUrl ?? undefined,
       messages,
       tools: tools.length > 0 ? tools : undefined,
@@ -130,9 +131,9 @@ export async function chat(
       // Check if confirm required
       if (toolDef?.confirmRequired) {
         const preview = `将执行「${toolDef.description}」，参数：${JSON.stringify(params)}`;
-        const rows: any[] = await prisma.$queryRawUnsafe(
-          `INSERT INTO ai_pending_actions (session_id, user_id, tool_name, parameters, preview) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-          sessionId, user.userId, toolName, JSON.stringify(params), preview
+        const paramsJson = JSON.stringify(params);
+        const rows: any[] = await prisma.$queryRaw(
+          Prisma.sql`INSERT INTO ai_pending_actions (session_id, user_id, tool_name, parameters, preview, expires_at) VALUES (${sessionId}, ${user.userId}, ${toolName}, ${paramsJson}, ${preview}, now() + interval '5 minutes') RETURNING *`
         );
         const pending = rows[0];
         const toolResult = JSON.stringify({ status: 'PENDING_CONFIRMATION', actionId: pending.id, preview });
@@ -206,7 +207,7 @@ export async function chatStream(
       const resp = await openaiChatWithTools({
         provider: config.provider,
         model: config.model,
-        apiKey: config.apiKey,
+        apiKey: decrypt(config.apiKey),
         baseUrl: config.baseUrl ?? undefined,
         messages,
         tools: tools.length > 0 ? tools : undefined,
@@ -283,9 +284,9 @@ export async function chatStream(
 
         if (toolDef?.confirmRequired) {
           const preview = `将执行「${toolDef.description}」，参数：${JSON.stringify(params)}`;
-          const rows: any[] = await prisma.$queryRawUnsafe(
-            `INSERT INTO ai_pending_actions (session_id, user_id, tool_name, parameters, preview) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-            sessionId, user.userId, toolName, JSON.stringify(params), preview
+          const paramsJson = JSON.stringify(params);
+          const rows: any[] = await prisma.$queryRaw(
+            Prisma.sql`INSERT INTO ai_pending_actions (session_id, user_id, tool_name, parameters, preview, expires_at) VALUES (${sessionId}, ${user.userId}, ${toolName}, ${paramsJson}, ${preview}, now() + interval '5 minutes') RETURNING *`
           );
           const pending = rows[0];
           const result = { status: 'PENDING_CONFIRMATION', actionId: pending.id, preview };

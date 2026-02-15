@@ -14,7 +14,7 @@ export function loadConfig(): AppConfig {
     jwtSecret: process.env.JWT_SECRET || 'eduforge-dev-secret-change-in-production',
     databaseUrl: process.env.DATABASE_URL || 'postgresql://postgres:123456@localhost:5432/eduforge_v2?schema=public',
     cors: {
-      origin: (process.env.CORS_ORIGIN || 'http://localhost:3000').split(','),
+      origin: (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:3002').split(','),
     },
   };
 }

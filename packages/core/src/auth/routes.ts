@@ -3,6 +3,15 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { signToken } from './jwt.js';
+import type { EventBus } from '../event-bus/index.js';
+
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  path: '/',
+  maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
+};
 
 const loginSchema = z.object({
   email: z.string().email('请输入有效邮箱'),
@@ -16,7 +25,7 @@ const registerSchema = z.object({
   role: z.enum(['TEACHER', 'STUDENT']).default('STUDENT'),
 });
 
-export function registerAuthRoutes(app: FastifyInstance, prisma: PrismaClient) {
+export function registerAuthRoutes(app: FastifyInstance, prisma: PrismaClient, eventBus?: EventBus) {
   // 登录
   app.post('/api/auth/login', async (request, reply) => {
     const result = loginSchema.safeParse(request.body);
@@ -46,6 +55,7 @@ export function registerAuthRoutes(app: FastifyInstance, prisma: PrismaClient) {
     });
 
     const token = signToken({ userId: user.id, email: user.email ?? undefined, role: user.role });
+    reply.setCookie('token', token, COOKIE_OPTIONS);
     return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
   });
 
@@ -73,7 +83,10 @@ export function registerAuthRoutes(app: FastifyInstance, prisma: PrismaClient) {
       await prisma.student.create({ data: { userId: user.id } });
     }
 
+    eventBus?.emit('user:created', { userId: user.id, name: user.name, role: user.role });
+
     const token = signToken({ userId: user.id, email: user.email ?? undefined, role: user.role });
+    reply.setCookie('token', token, COOKIE_OPTIONS);
     return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
   });
 
@@ -90,5 +103,11 @@ export function registerAuthRoutes(app: FastifyInstance, prisma: PrismaClient) {
       select: { id: true, name: true, email: true, role: true, avatarUrl: true, schoolId: true },
     });
     return { user };
+  });
+
+  // 登出
+  app.post('/api/auth/logout', async (request, reply) => {
+    reply.clearCookie('token', { path: '/' });
+    return { success: true };
   });
 }

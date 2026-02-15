@@ -18,19 +18,22 @@ export default function ClassesPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [grades, setGrades] = useState<any[]>([]);
+  const [error, setError] = useState('');
 
   async function loadClasses() {
     setLoading(true);
     try {
       const data = await apiFetch('/api/classes');
       setClasses(Array.isArray(data) ? data : []);
-    } catch {}
+    } catch (err: any) {
+      setError(err.message || '加载失败');
+    }
     setLoading(false);
   }
 
   useEffect(() => {
     loadClasses();
-    apiFetch('/api/grades').then(setGrades).catch(() => {});
+    apiFetch('/api/grades').then(setGrades).catch((err: any) => { setError(err.message || '加载失败'); });
   }, []);
 
   return (
@@ -44,6 +47,8 @@ export default function ClassesPage() {
           + 创建班级
         </button>
       </div>
+
+      {error && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">{error}</div>}
 
       {loading ? (
         <div className="text-center py-12 text-gray-400">加载中...</div>

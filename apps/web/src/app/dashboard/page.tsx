@@ -9,15 +9,22 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Record<string, any>>({});
   const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
     if (stored) {
-      const u = JSON.parse(stored);
-      setUser(u);
-      loadStats(u);
+      try {
+        const u = JSON.parse(stored);
+        setUser(u);
+        loadStats(u);
+      } catch (err: any) {
+        setError(err.message || '加载失败');
+      }
     }
-    apiFetch('/api/plugins').then(setPlugins).catch(() => {});
+    apiFetch('/api/plugins').then(setPlugins).catch((err: any) => {
+      setError(err.message || '加载失败');
+    });
   }, []);
 
   async function loadStats(u: any) {
@@ -25,8 +32,8 @@ export default function DashboardPage() {
     try {
       if (u.role === 'STUDENT') {
         const [assignData, subData] = await Promise.all([
-          apiFetch('/api/plugins/homework/assignments').catch(() => []),
-          apiFetch('/api/plugins/homework/my-submissions').catch(() => []),
+          apiFetch('/api/plugins/homework/assignments').catch((err: any) => { setError(err.message || '加载失败'); return []; }),
+          apiFetch('/api/plugins/homework/my-submissions').catch((err: any) => { setError(err.message || '加载失败'); return []; }),
         ]);
         const assignments = Array.isArray(assignData) ? assignData : [];
         const submissions = Array.isArray(subData) ? subData : [];
@@ -51,9 +58,9 @@ export default function DashboardPage() {
         setActivities(recent);
       } else {
         const [qData, subData, classData] = await Promise.all([
-          apiFetch('/api/plugins/question-bank/questions?limit=1').catch(() => ({ total: 0 })),
-          apiFetch('/api/plugins/homework/submissions?status=SUBMITTED').catch(() => []),
-          apiFetch('/api/classes').catch(() => []),
+          apiFetch('/api/plugins/question-bank/questions?limit=1').catch((err: any) => { setError(err.message || '加载失败'); return { total: 0 }; }),
+          apiFetch('/api/plugins/homework/submissions?status=SUBMITTED').catch((err: any) => { setError(err.message || '加载失败'); return []; }),
+          apiFetch('/api/classes').catch((err: any) => { setError(err.message || '加载失败'); return []; }),
         ]);
         const classes = Array.isArray(classData) ? classData : [];
         const submissions = Array.isArray(subData) ? subData : [];
@@ -77,7 +84,9 @@ export default function DashboardPage() {
           }));
         setActivities(recent);
       }
-    } catch {}
+    } catch (err: any) {
+      setError(err.message || '加载失败');
+    }
     setLoading(false);
   }
 
@@ -105,6 +114,8 @@ export default function DashboardPage() {
     <div>
       <h1 className="text-2xl font-bold mb-1">欢迎回来，{user.name}</h1>
       <p className="text-gray-500 mb-8">{isStudent ? '这是你的学习工作台' : '这是你的教学工作台'}</p>
+
+      {error && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">{error}</div>}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {cards.map(c => (

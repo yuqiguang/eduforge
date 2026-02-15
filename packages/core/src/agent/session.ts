@@ -1,25 +1,22 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 
 export async function createSession(prisma: PrismaClient, userId: string, title?: string) {
-  const rows: any[] = await prisma.$queryRawUnsafe(
-    `INSERT INTO ai_chat_sessions (user_id, title) VALUES ($1, $2) RETURNING *`,
-    userId, title || null
+  const rows: any[] = await prisma.$queryRaw(
+    Prisma.sql`INSERT INTO ai_chat_sessions (user_id, title) VALUES (${userId}, ${title || null}) RETURNING *`
   );
   return rows[0];
 }
 
 export async function getSession(prisma: PrismaClient, sessionId: string, userId: string) {
-  const rows: any[] = await prisma.$queryRawUnsafe(
-    `SELECT * FROM ai_chat_sessions WHERE id = $1 AND user_id = $2`,
-    sessionId, userId
+  const rows: any[] = await prisma.$queryRaw(
+    Prisma.sql`SELECT * FROM ai_chat_sessions WHERE id = ${sessionId} AND user_id = ${userId}`
   );
   return rows[0] || null;
 }
 
 export async function listSessions(prisma: PrismaClient, userId: string) {
-  return prisma.$queryRawUnsafe(
-    `SELECT id, title, created_at, updated_at FROM ai_chat_sessions WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 50`,
-    userId
+  return prisma.$queryRaw(
+    Prisma.sql`SELECT id, title, created_at, updated_at FROM ai_chat_sessions WHERE user_id = ${userId} ORDER BY updated_at DESC LIMIT 50`
   );
 }
 
@@ -31,30 +28,33 @@ export async function saveMessage(prisma: PrismaClient, data: {
   toolResult?: any;
   metadata?: any;
 }) {
-  const rows: any[] = await prisma.$queryRawUnsafe(
-    `INSERT INTO ai_chat_messages (session_id, role, content, tool_calls, tool_result, metadata) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb) RETURNING *`,
-    data.sessionId, data.role, data.content || null,
-    data.toolCalls ? JSON.stringify(data.toolCalls) : null,
-    data.toolResult ? JSON.stringify(data.toolResult) : null,
-    data.metadata ? JSON.stringify(data.metadata) : null
+  const toolCallsJson = data.toolCalls ? JSON.stringify(data.toolCalls) : null;
+  const toolResultJson = data.toolResult ? JSON.stringify(data.toolResult) : null;
+  const metadataJson = data.metadata ? JSON.stringify(data.metadata) : null;
+
+  const rows: any[] = await prisma.$queryRaw(
+    Prisma.sql`INSERT INTO ai_chat_messages (session_id, role, content, tool_calls, tool_result, metadata)
+     VALUES (${data.sessionId}, ${data.role}, ${data.content || null}, ${toolCallsJson}::jsonb, ${toolResultJson}::jsonb, ${metadataJson}::jsonb)
+     RETURNING *`
   );
   // Update session timestamp
-  await prisma.$executeRawUnsafe(
-    `UPDATE ai_chat_sessions SET updated_at = now() WHERE id = $1`, data.sessionId
+  await prisma.$executeRaw(
+    Prisma.sql`UPDATE ai_chat_sessions SET updated_at = now() WHERE id = ${data.sessionId}`
   );
   return rows[0];
 }
 
 export async function loadMessages(prisma: PrismaClient, sessionId: string, limit = 20) {
-  return prisma.$queryRawUnsafe(
-    `SELECT * FROM ai_chat_messages WHERE session_id = $1 ORDER BY created_at DESC LIMIT $2`,
-    sessionId, limit
+  return prisma.$queryRaw(
+    Prisma.sql`SELECT * FROM ai_chat_messages WHERE session_id = ${sessionId} ORDER BY created_at DESC LIMIT ${limit}`
   );
 }
 
-export async function getSessionMessages(prisma: PrismaClient, sessionId: string) {
-  return prisma.$queryRawUnsafe(
-    `SELECT * FROM ai_chat_messages WHERE session_id = $1 ORDER BY created_at ASC`,
-    sessionId
+export async function getSessionMessages(prisma: PrismaClient, sessionId: string, userId: string) {
+  // Verify session ownership before returning messages
+  const session = await getSession(prisma, sessionId, userId);
+  if (!session) return [];
+  return prisma.$queryRaw(
+    Prisma.sql`SELECT * FROM ai_chat_messages WHERE session_id = ${sessionId} ORDER BY created_at ASC`
   );
 }

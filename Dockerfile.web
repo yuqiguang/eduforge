@@ -26,11 +26,16 @@ ENV NODE_ENV=production
 
 # Copy standalone Next.js output if available, otherwise full build
 COPY --from=build /app/apps/web/.next/ apps/web/.next/
-COPY --from=build /app/apps/web/public/ apps/web/public/ 
+COPY --from=build /app/apps/web/public/ apps/web/public/
 COPY --from=build /app/apps/web/package.json apps/web/
 COPY --from=build /app/apps/web/node_modules/ apps/web/node_modules/
 COPY --from=build /app/node_modules/ node_modules/
 COPY pnpm-workspace.yaml package.json ./
+
+# Run as non-root user
+RUN addgroup -g 1001 -S appgroup && adduser -S appuser -u 1001 -G appgroup
+RUN chown -R appuser:appgroup /app
+USER appuser
 
 EXPOSE 3000
 WORKDIR /app/apps/web

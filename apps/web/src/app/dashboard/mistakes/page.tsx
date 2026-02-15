@@ -17,9 +17,10 @@ export default function MistakesPage() {
   const [loading, setLoading] = useState(true);
   const [subjectFilter, setSubjectFilter] = useState('');
   const [subjects, setSubjects] = useState<any[]>([]);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    apiFetch('/api/subjects').then(setSubjects).catch(() => {});
+    apiFetch('/api/subjects').then(setSubjects).catch((err: any) => { setError(err.message || '加载失败'); });
     loadMistakes();
   }, []);
 
@@ -33,15 +34,27 @@ export default function MistakesPage() {
       const query = subjectFilter ? `?subjectId=${subjectFilter}` : '';
       const data = await apiFetch(`/api/plugins/ai-grading/mistakes${query}`);
       setRecords(Array.isArray(data) ? data : []);
-    } catch {}
+    } catch (err: any) {
+      setError(err.message || '加载失败');
+    }
     setLoading(false);
   }
 
   // Extract wrong questions from grading details
   const mistakes: { question: string; myAnswer: string; correctAnswer: string; comment: string; assignmentTitle: string; subjectId: string; gradedAt: string }[] = [];
   for (const r of records) {
-    const details = typeof r.details === 'string' ? JSON.parse(r.details) : (r.details || []);
-    const answers = typeof r.answers === 'string' ? JSON.parse(r.answers) : (r.answers || {});
+    let details: any[];
+    try {
+      details = typeof r.details === 'string' ? JSON.parse(r.details) : (r.details || []);
+    } catch {
+      details = [];
+    }
+    let answers: any;
+    try {
+      answers = typeof r.answers === 'string' ? JSON.parse(r.answers) : (r.answers || {});
+    } catch {
+      answers = {};
+    }
     for (const d of details) {
       if (d.correct === false) {
         mistakes.push({
@@ -61,6 +74,8 @@ export default function MistakesPage() {
     <div>
       <h1 className="text-2xl font-bold mb-1">错题本</h1>
       <p className="text-gray-500 text-sm mb-6">回顾做错的题目，查看 AI 解析</p>
+
+      {error && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">{error}</div>}
 
       <div className="flex gap-2 mb-6">
         <select value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)}

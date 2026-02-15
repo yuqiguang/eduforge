@@ -33,7 +33,7 @@ model User {
   status       UserStatus @default(ACTIVE)
   avatarUrl    String?
   schoolId     String?
-  school       School?    @relation(fields: [schoolId], references: [id])
+  school       School?    @relation(fields: [schoolId], references: [id], onDelete: SetNull)
   lastLoginAt  DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -49,19 +49,23 @@ model User {
 model Teacher {
   id        String         @id @default(cuid())
   userId    String         @unique
-  user      User           @relation(fields: [userId], references: [id])
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String?
   createdAt DateTime       @default(now())
   classes   ClassTeacher[]
+
+  @@index([userId])
 }
 
 model Student {
   id        String         @id @default(cuid())
   userId    String         @unique
-  user      User           @relation(fields: [userId], references: [id])
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   studentNo String?
   createdAt DateTime       @default(now())
   classes   ClassStudent[]
+
+  @@index([userId])
 }
 
 // ===== 组织结构 =====
@@ -96,9 +100,9 @@ model Grade {
   code         String     @unique
   order        Int
   studyLevelId String
-  studyLevel   StudyLevel @relation(fields: [studyLevelId], references: [id])
+  studyLevel   StudyLevel @relation(fields: [studyLevelId], references: [id], onDelete: Cascade)
   schoolId     String?
-  school       School?    @relation(fields: [schoolId], references: [id])
+  school       School?    @relation(fields: [schoolId], references: [id], onDelete: SetNull)
   createdAt    DateTime   @default(now())
 
   classes Class[]
@@ -111,7 +115,7 @@ model Class {
   id           String   @id @default(cuid())
   name         String
   gradeId      String
-  grade        Grade    @relation(fields: [gradeId], references: [id])
+  grade        Grade    @relation(fields: [gradeId], references: [id], onDelete: Cascade)
   academicYear String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -131,24 +135,26 @@ model Subject {
   order Int    @default(0)
 
   classTeachers ClassTeacher[]
+
+  @@index([code])
 }
 
 model ClassTeacher {
   classId   String
-  cls       Class   @relation(fields: [classId], references: [id])
+  cls       Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
   teacherId String
-  teacher   Teacher @relation(fields: [teacherId], references: [id])
+  teacher   Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   subjectId String
-  subject   Subject @relation(fields: [subjectId], references: [id])
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
   @@id([classId, teacherId, subjectId])
 }
 
 model ClassStudent {
   classId   String
-  cls       Class   @relation(fields: [classId], references: [id])
+  cls       Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
   studentId String
-  student   Student @relation(fields: [studentId], references: [id])
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@id([classId, studentId])
 }
@@ -171,6 +177,8 @@ model Plugin {
   config      Json?
   installedAt DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+
+  @@index([status])
 }
 
 // ===== AI 配置 =====
@@ -178,7 +186,7 @@ model Plugin {
 model AIConfig {
   id        String   @id @default(cuid())
   schoolId  String?
-  school    School?  @relation(fields: [schoolId], references: [id])
+  school    School?  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   provider  String
   model     String
   apiKey    String
@@ -193,7 +201,7 @@ model AIConfig {
 model AIUsageLog {
   id           String   @id @default(cuid())
   userId       String
-  user         User     @relation(fields: [userId], references: [id])
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   schoolId     String?
   plugin       String
   provider     String
@@ -206,6 +214,7 @@ model AIUsageLog {
   @@index([userId])
   @@index([schoolId])
   @@index([createdAt])
+  @@index([userId, createdAt])
 }
 
 // ===== 系统设置 =====

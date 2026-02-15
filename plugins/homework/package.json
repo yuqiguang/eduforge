@@ -1,7 +1,10 @@
 {
-  "name": "@eduforge/plugin-'$p'",
+  "name": "@eduforge/plugin-homework",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "src/index.ts"
+  "main": "src/index.ts",
+  "dependencies": {
+    "@eduforge/sdk": "workspace:*"
+  }
 }

@@ -1,5 +1,6 @@
 import { registerTool, type ToolDefinition } from './tool-registry.js';
 import { openaiChatWithTools } from '../ai-gateway/providers/openai.js';
+import { decrypt } from '../crypto.js';
 
 const queryQuestions: ToolDefinition = {
   name: 'query_questions',
@@ -146,7 +147,7 @@ const generateQuestions: ToolDefinition = {
     const resp = await openaiChatWithTools({
       provider: config.provider,
       model: config.model,
-      apiKey: config.apiKey,
+      apiKey: decrypt(config.apiKey),
       baseUrl: config.baseUrl ?? undefined,
       messages: [
         { role: 'system', content: '你是出题专家，根据要求生成高质量题目。只返回JSON。' },

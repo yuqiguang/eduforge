@@ -9,6 +9,7 @@ export default function AnalyticsPage() {
   const [assignments, setAssignments] = useState<any[]>([]);
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     apiFetch('/api/classes')
@@ -17,7 +18,7 @@ export default function AnalyticsPage() {
         setClasses(list);
         if (list.length > 0) setSelectedClass(list[0].id);
       })
-      .catch(() => {})
+      .catch((err: any) => { setError(err.message || '加载失败'); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -29,7 +30,7 @@ export default function AnalyticsPage() {
     ]).then(([a, s]) => {
       setAssignments(Array.isArray(a) ? a : []);
       setSubmissions(Array.isArray(s) ? s : []);
-    }).catch(() => {});
+    }).catch((err: any) => { setError(err.message || '加载失败'); });
   }, [selectedClass]);
 
   if (loading) return <div className="text-center py-12 text-gray-400">加载中...</div>;
@@ -61,6 +62,8 @@ export default function AnalyticsPage() {
     <div>
       <h1 className="text-2xl font-bold mb-1">学情分析</h1>
       <p className="text-gray-500 text-sm mb-6">班级成绩概览和学生表现</p>
+
+      {error && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">{error}</div>}
 
       {/* 班级选择 */}
       <div className="mb-6">

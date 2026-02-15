@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { openaiComplete, type AIMessage, type AICompletionResult } from './providers/openai.js';
 import { authMiddleware } from '../auth/middleware.js';
+import { encrypt, decrypt, maskApiKey } from '../crypto.js';
 
 export interface AIRequest {
   task: string;
@@ -26,7 +27,7 @@ export class AIGateway {
     const result = await openaiComplete({
       provider: config.provider,
       model: config.model,
-      apiKey: config.apiKey,
+      apiKey: decrypt(config.apiKey),
       baseUrl: config.baseUrl ?? undefined,
       messages: request.messages,
       temperature: request.temperature,
@@ -57,7 +58,7 @@ export class AIGateway {
         userId: request.userId!,
         schoolId: request.schoolId,
         plugin: request.plugin || 'system',
-        provider: request.model?.split('/')[0] || 'unknown',
+        provider: result.model?.split('/')[0] || 'unknown',
         model: result.model,
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
@@ -72,9 +73,10 @@ export function registerAIRoutes(app: FastifyInstance, prisma: PrismaClient) {
     const user = (request as any).user;
     const configs = await prisma.aIConfig.findMany({
       where: user.role === 'SUPER_ADMIN' ? {} : { schoolId: user.schoolId },
-      select: { id: true, provider: true, model: true, baseUrl: true, isDefault: true, schoolId: true },
+      select: { id: true, provider: true, model: true, baseUrl: true, isDefault: true, schoolId: true, apiKey: true },
     });
-    return configs;
+    // Mask API keys in response
+    return configs.map((c: typeof configs[number]) => ({ ...c, apiKey: maskApiKey(decrypt(c.apiKey)) }));
   });
 
   app.post('/api/ai/config', { preHandler: [authMiddleware] }, async (request, reply) => {
@@ -83,17 +85,18 @@ export function registerAIRoutes(app: FastifyInstance, prisma: PrismaClient) {
       return reply.code(403).send({ error: '权限不足' });
     }
     const body = request.body as any;
+    if (!body.apiKey) return reply.code(400).send({ error: '缺少 apiKey' });
     const config = await prisma.aIConfig.create({
       data: {
         provider: body.provider,
         model: body.model,
-        apiKey: body.apiKey,
+        apiKey: encrypt(body.apiKey),
         baseUrl: body.baseUrl,
         schoolId: body.schoolId,
         isDefault: body.isDefault || false,
       },
     });
-    return config;
+    return { ...config, apiKey: maskApiKey(body.apiKey) };
   });
 
   // AI 连接测试

@@ -21,6 +21,7 @@ export default function QuestionsPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [showAI, setShowAI] = useState(false);
+  const [error, setError] = useState('');
 
   async function loadQuestions() {
     setLoading(true);
@@ -28,7 +29,9 @@ export default function QuestionsPage() {
       const data = await apiFetch('/api/plugins/question-bank/questions');
       setQuestions(data.data || []);
       setTotal(data.total || 0);
-    } catch { }
+    } catch (err: any) {
+      setError(err.message || '加载失败');
+    }
     setLoading(false);
   }
 
@@ -58,6 +61,8 @@ export default function QuestionsPage() {
           </button>
         </div>
       </div>
+
+      {error && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">{error}</div>}
 
       {/* 题库提示卡片 */}
       {!loading && (

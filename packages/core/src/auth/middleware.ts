@@ -1,10 +1,11 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { verifyToken } from './jwt.js';
 
-// 认证中间件
+// 认证中间件 — 支持 Bearer token 和 HttpOnly cookie
 export async function authMiddleware(request: FastifyRequest, reply: FastifyReply) {
   const authHeader = request.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7)
+    : (request.cookies as any)?.token ?? null;
 
   if (!token) {
     return reply.code(401).send({ error: '未登录' });

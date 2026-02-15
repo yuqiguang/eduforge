@@ -24,7 +24,6 @@ export default function RegisterPage() {
         method: 'POST',
         body: JSON.stringify({ name, email, password, role }),
       });
-      localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
       router.push('/dashboard');
     } catch (err: any) {

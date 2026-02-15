@@ -1,4 +1,4 @@
-import type { EduPlugin, PluginContext } from '../../packages/core/src/plugin-engine/types.js';
+import type { EduPlugin, PluginContext } from '@eduforge/sdk';
 
 // 题目类型枚举
 export type QuestionType = 'SINGLE_CHOICE' | 'MULTI_CHOICE' | 'TRUE_FALSE' | 'FILL_BLANK' | 'SHORT_ANSWER' | 'ESSAY';
@@ -104,7 +104,7 @@ const questionBankPlugin: EduPlugin = {
       };
     });
 
-    // 创建题目
+    // 创建题目（仅教师/管理员）
     ctx.registerRoute('POST', '/questions', async (request: any) => {
       const body = request.body as any;
       const user = (request as any).user;
@@ -129,9 +129,9 @@ const questionBankPlugin: EduPlugin = {
 
       ctx.events.emit('question-bank:question_created', (result as any)[0]);
       return (result as any)[0];
-    });
+    }, { roles: ['TEACHER', 'ADMIN', 'SUPER_ADMIN'] });
 
-    // AI 生成题目
+    // AI 生成题目（仅教师/管理员）
     ctx.registerRoute('POST', '/questions/ai-generate', async (request: any) => {
       const { subjectId, knowledgePoint, type, difficulty, count = 3 } = request.body as any;
       const user = (request as any).user;
@@ -170,7 +170,7 @@ const questionBankPlugin: EduPlugin = {
       }
 
       return { raw: result.content, tokens: result.inputTokens + result.outputTokens };
-    });
+    }, { roles: ['TEACHER', 'ADMIN', 'SUPER_ADMIN'] });
 
     // 获取单个题目
     ctx.registerRoute('GET', '/questions/:id', async (request: any) => {
@@ -183,12 +183,12 @@ const questionBankPlugin: EduPlugin = {
       return row;
     });
 
-    // 删除题目
+    // 删除题目（仅教师/管理员）
     ctx.registerRoute('DELETE', '/questions/:id', async (request: any) => {
       const { id } = request.params as any;
       await ctx.prisma.$executeRawUnsafe('DELETE FROM plugin_qb_questions WHERE id = $1', id);
       return { success: true };
-    });
+    }, { roles: ['TEACHER', 'ADMIN', 'SUPER_ADMIN'] });
 
     ctx.logger.info('题库插件路由注册完成');
   },

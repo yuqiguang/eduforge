@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import DOMPurify from 'dompurify';
 import { apiFetch } from '@/lib/api';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -14,7 +15,7 @@ interface Message {
   toolStatus?: string;
 }
 
-// ── Simple markdown ────────────────────────────────────
+// ── Simple markdown with DOMPurify sanitization ────────
 function renderMarkdown(text: string) {
   let html = text
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -24,7 +25,10 @@ function renderMarkdown(text: string) {
     .replace(/^\- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
     .replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal">$1</li>')
     .replace(/\n/g, '<br/>');
-  return html;
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ['pre', 'code', 'strong', 'li', 'br', 'ul', 'ol', 'em', 'p', 'span'],
+    ALLOWED_ATTR: ['class'],
+  });
 }
 
 // ── SSE stream with fetch fallback ─────────────────────
@@ -35,12 +39,11 @@ function streamChat(
   onError: (err: any) => void,
   onDone: () => void,
 ) {
-  const token = localStorage.getItem('token');
   const url = `${API_BASE}/api/chat/stream?sessionId=${sessionId}&message=${encodeURIComponent(message)}`;
   const ctrl = new AbortController();
 
   fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
+    credentials: 'include',
     signal: ctrl.signal,
   })
     .then(async (res) => {
@@ -56,7 +59,7 @@ function streamChat(
         buf = lines.pop()!;
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            try { onChunk(JSON.parse(line.slice(6))); } catch {}
+            try { onChunk(JSON.parse(line.slice(6))); } catch { /* ignore malformed SSE chunks */ }
           }
         }
       }
@@ -80,12 +83,19 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [thinking, setThinking] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [error, setError] = useState('');
   const messagesEnd = useRef<HTMLDivElement>(null);
   const abortRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const s = localStorage.getItem('user');
-    if (s) setUser(JSON.parse(s));
+    if (s) {
+      try {
+        setUser(JSON.parse(s));
+      } catch (err: any) {
+        setError(err.message || '加载失败');
+      }
+    }
   }, []);
 
   // Load sessions
@@ -93,7 +103,9 @@ export default function ChatPage() {
     try {
       const data = await apiFetch('/api/chat/sessions');
       setSessions(Array.isArray(data) ? data : data.sessions ?? []);
-    } catch {}
+    } catch (err: any) {
+      setError(err.message || '加载失败');
+    }
   }, []);
   useEffect(() => { loadSessions(); }, [loadSessions]);
 
@@ -104,7 +116,10 @@ export default function ChatPage() {
       try {
         const data = await apiFetch(`/api/chat/sessions/${activeId}/messages`);
         setMessages(Array.isArray(data) ? data : data.messages ?? []);
-      } catch { setMessages([]); }
+      } catch (err: any) {
+        setError(err.message || '加载失败');
+        setMessages([]);
+      }
     })();
   }, [activeId]);
 
@@ -131,7 +146,8 @@ export default function ChatPage() {
         sid = s.id;
         setActiveId(sid);
         loadSessions();
-      } catch {
+      } catch (err: any) {
+        setError(err.message || '加载失败');
         setSending(false);
         setThinking('');
         return;
@@ -210,11 +226,11 @@ export default function ChatPage() {
 
   // ── Confirm / Cancel ─────────────────────────────────
   const handleConfirm = async (actionId: string) => {
-    try { await apiFetch(`/api/chat/confirm/${actionId}`, { method: 'POST' }); } catch {}
+    try { await apiFetch(`/api/chat/confirm/${actionId}`, { method: 'POST' }); } catch (err: any) { setError(err.message || '加载失败'); }
     setMessages(prev => prev.filter(m => m.confirm?.actionId !== actionId));
   };
   const handleCancel = async (actionId: string) => {
-    try { await apiFetch(`/api/chat/cancel/${actionId}`, { method: 'POST' }); } catch {}
+    try { await apiFetch(`/api/chat/cancel/${actionId}`, { method: 'POST' }); } catch (err: any) { setError(err.message || '加载失败'); }
     setMessages(prev => prev.filter(m => m.confirm?.actionId !== actionId));
   };
 
@@ -292,6 +308,7 @@ export default function ChatPage() {
           <span className="text-sm text-gray-600 truncate">{activeId ? sessions.find(s => s.id === activeId)?.title || '对话' : 'AI 助手'}</span>
           <button onClick={newChat} className="ml-auto text-sm text-blue-600 font-medium px-2 py-1">+ 新对话</button>
         </div>
+        {error && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm mb-4 mx-4 mt-2">{error}</div>}
         {/* Empty state */}
         {!activeId && messages.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">

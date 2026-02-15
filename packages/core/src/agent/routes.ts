@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { authMiddleware } from '../auth/middleware.js';
 import { chat, chatStream } from './engine.js';
 import { listSessions, getSessionMessages } from './session.js';
@@ -7,6 +7,45 @@ import { executeTool, getTool, type ToolContext } from './tool-registry.js';
 import { registerBuiltinTools } from './builtin-tools.js';
 
 export function registerAgentRoutes(app: FastifyInstance, prisma: PrismaClient) {
+  // Initialize agent tables
+  prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ai_chat_sessions (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      user_id TEXT NOT NULL,
+      title TEXT,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now()
+    )
+  `).catch(() => {});
+  prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ai_chat_messages (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      session_id TEXT NOT NULL REFERENCES ai_chat_sessions(id),
+      role TEXT NOT NULL,
+      content TEXT,
+      tool_calls JSONB,
+      tool_result JSONB,
+      metadata JSONB,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )
+  `).catch(() => {});
+  prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ai_pending_actions (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      session_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      tool_name TEXT NOT NULL,
+      parameters JSONB NOT NULL,
+      preview TEXT,
+      status TEXT DEFAULT 'PENDING',
+      resolved_at TIMESTAMPTZ,
+      expires_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )
+  `).catch(() => {});
+  // Add expires_at column if missing (for existing deployments)
+  prisma.$executeRawUnsafe(`ALTER TABLE ai_pending_actions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`).catch(() => {});
+
   // Initialize builtin tools
   registerBuiltinTools();
 
@@ -58,7 +97,7 @@ export function registerAgentRoutes(app: FastifyInstance, prisma: PrismaClient) 
   app.get('/api/chat/sessions/:id', { preHandler: [authMiddleware] }, async (request) => {
     const user = (request as any).user;
     const { id } = request.params as any;
-    return getSessionMessages(prisma, id);
+    return getSessionMessages(prisma, id, user.userId);
   });
 
   // POST /api/chat/confirm/:actionId
@@ -66,17 +105,16 @@ export function registerAgentRoutes(app: FastifyInstance, prisma: PrismaClient) 
     const user = (request as any).user;
     const { actionId } = request.params as any;
 
-    const rows: any[] = await prisma.$queryRawUnsafe(
-      `SELECT * FROM ai_pending_actions WHERE id = $1 AND user_id = $2 AND status = 'PENDING'`,
-      actionId, user.userId
+    const rows: any[] = await prisma.$queryRaw(
+      Prisma.sql`SELECT * FROM ai_pending_actions WHERE id = ${actionId} AND user_id = ${user.userId} AND status = 'PENDING'`
     );
     const action = rows[0];
     if (!action) return reply.code(404).send({ error: '操作不存在或已过期' });
 
     // Check expiry
-    if (new Date(action.expires_at) < new Date()) {
-      await prisma.$executeRawUnsafe(
-        `UPDATE ai_pending_actions SET status = 'EXPIRED', resolved_at = now() WHERE id = $1`, actionId
+    if (action.expires_at && new Date(action.expires_at) < new Date()) {
+      await prisma.$executeRaw(
+        Prisma.sql`UPDATE ai_pending_actions SET status = 'EXPIRED', resolved_at = now() WHERE id = ${actionId}`
       );
       return reply.code(410).send({ error: '操作已过期' });
     }
@@ -95,13 +133,13 @@ export function registerAgentRoutes(app: FastifyInstance, prisma: PrismaClient) 
 
     try {
       const result = await toolDef.execute(params, ctx);
-      await prisma.$executeRawUnsafe(
-        `UPDATE ai_pending_actions SET status = 'CONFIRMED', resolved_at = now() WHERE id = $1`, actionId
+      await prisma.$executeRaw(
+        Prisma.sql`UPDATE ai_pending_actions SET status = 'CONFIRMED', resolved_at = now() WHERE id = ${actionId}`
       );
       return { success: true, result };
     } catch (err: any) {
-      await prisma.$executeRawUnsafe(
-        `UPDATE ai_pending_actions SET status = 'FAILED', resolved_at = now() WHERE id = $1`, actionId
+      await prisma.$executeRaw(
+        Prisma.sql`UPDATE ai_pending_actions SET status = 'FAILED', resolved_at = now() WHERE id = ${actionId}`
       );
       return reply.code(500).send({ error: err.message });
     }
@@ -112,9 +150,8 @@ export function registerAgentRoutes(app: FastifyInstance, prisma: PrismaClient) 
     const user = (request as any).user;
     const { actionId } = request.params as any;
 
-    const result = await prisma.$executeRawUnsafe(
-      `UPDATE ai_pending_actions SET status = 'CANCELLED', resolved_at = now() WHERE id = $1 AND user_id = $2 AND status = 'PENDING'`,
-      actionId, user.userId
+    const result = await prisma.$executeRaw(
+      Prisma.sql`UPDATE ai_pending_actions SET status = 'CANCELLED', resolved_at = now() WHERE id = ${actionId} AND user_id = ${user.userId} AND status = 'PENDING'`
     );
     return { success: true };
   });

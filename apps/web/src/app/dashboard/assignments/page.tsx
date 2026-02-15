@@ -28,13 +28,16 @@ export default function AssignmentsPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [viewingId, setViewingId] = useState<string | null>(null);
+  const [error, setError] = useState('');
 
   async function loadAssignments() {
     setLoading(true);
     try {
       const data = await apiFetch('/api/plugins/homework/assignments');
       setAssignments(Array.isArray(data) ? data : []);
-    } catch { }
+    } catch (err: any) {
+      setError(err.message || '加载失败');
+    }
     setLoading(false);
   }
 
@@ -56,6 +59,8 @@ export default function AssignmentsPage() {
           + 布置作业
         </button>
       </div>
+
+      {error && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">{error}</div>}
 
       {loading ? (
         <div className="text-center py-12 text-gray-400">加载中...</div>
@@ -99,11 +104,12 @@ export default function AssignmentsPage() {
 function SubmissionsView({ assignment, onBack }: { assignment: Assignment; onBack: () => void }) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     apiFetch(`/api/plugins/homework/submissions?assignmentId=${assignment.id}`)
       .then(data => setSubmissions(Array.isArray(data) ? data : []))
-      .catch(() => {})
+      .catch((err: any) => { setError(err.message || '加载失败'); })
       .finally(() => setLoading(false));
   }, [assignment.id]);
 
@@ -112,9 +118,11 @@ function SubmissionsView({ assignment, onBack }: { assignment: Assignment; onBac
       <button onClick={onBack} className="text-sm text-blue-600 hover:underline mb-4">← 返回作业列表</button>
       <h1 className="text-2xl font-bold mb-1">{assignment.title}</h1>
       <p className="text-gray-500 text-sm mb-6">
-        {assignment.question_ids?.length || 0} 道题 · 
+        {assignment.question_ids?.length || 0} 道题 ·
         {assignment.deadline ? ` 截止: ${new Date(assignment.deadline).toLocaleString('zh-CN')}` : ' 无截止时间'}
       </p>
+
+      {error && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">{error}</div>}
 
       <div className="bg-white rounded-xl border">
         <div className="px-5 py-3 border-b">
@@ -164,13 +172,14 @@ function CreateAssignmentModal({ onClose, onCreated }: { onClose: () => void; on
   const [selected, setSelected] = useState<string[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     apiFetch('/api/plugins/question-bank/questions?pageSize=100')
       .then(data => setQuestions(data.data || []))
-      .catch(() => {});
-    apiFetch('/api/classes').then(data => setClasses(Array.isArray(data) ? data : [])).catch(() => {});
-    apiFetch('/api/subjects').then(data => setSubjects(Array.isArray(data) ? data : [])).catch(() => {});
+      .catch((err: any) => { setError(err.message || '加载失败'); });
+    apiFetch('/api/classes').then(data => setClasses(Array.isArray(data) ? data : [])).catch((err: any) => { setError(err.message || '加载失败'); });
+    apiFetch('/api/subjects').then(data => setSubjects(Array.isArray(data) ? data : [])).catch((err: any) => { setError(err.message || '加载失败'); });
   }, []);
 
   const filteredQuestions = subjectFilter
@@ -208,6 +217,7 @@ function CreateAssignmentModal({ onClose, onCreated }: { onClose: () => void; on
     <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
         <h2 className="text-xl font-bold mb-4">布置作业</h2>
+        {error && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">作业标题</label>

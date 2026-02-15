@@ -35,6 +35,7 @@ export default function MyAssignmentsPage() {
   const [activeTab, setActiveTab] = useState<'pending' | 'completed'>('pending');
   const [doingAssignment, setDoingAssignment] = useState<Assignment | null>(null);
   const [viewingSubmission, setViewingSubmission] = useState<Submission | null>(null);
+  const [error, setError] = useState('');
 
   useEffect(() => { loadData(); }, []);
 
@@ -47,7 +48,9 @@ export default function MyAssignmentsPage() {
       ]);
       setAssignments(Array.isArray(assignData) ? assignData : []);
       setSubmissions(Array.isArray(subData) ? subData : []);
-    } catch {}
+    } catch (err: any) {
+      setError(err.message || '加载失败');
+    }
     setLoading(false);
   }
 
@@ -62,6 +65,14 @@ export default function MyAssignmentsPage() {
   }
 
   if (loading) return <div className="text-center py-12 text-gray-400">加载中...</div>;
+
+  if (error && !doingAssignment && !viewingSubmission) return (
+    <div>
+      <h1 className="text-2xl font-bold mb-1">我的作业</h1>
+      <p className="text-gray-500 text-sm mb-6">查看和完成你的作业</p>
+      <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">{error}</div>
+    </div>
+  );
 
   if (doingAssignment) {
     return <DoAssignment assignment={doingAssignment} onBack={() => { setDoingAssignment(null); loadData(); }} />;
@@ -157,6 +168,7 @@ function ViewGradingResult({ submission, onBack }: { submission: Submission; onB
   const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [details, setDetails] = useState<any>(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     // Load grading details
@@ -173,15 +185,25 @@ function ViewGradingResult({ submission, onBack }: { submission: Submission; onB
             });
         }
       })
-      .catch(() => {})
+      .catch((err: any) => { setError(err.message || '加载失败'); })
       .finally(() => setLoading(false));
   }, [submission.id]);
 
   const answers = details?.answers || submission.answers || {};
   const gradingDetails = details?.grading_details || details?.gradingDetails || submission.grading_details || {};
   const feedback = details?.feedback || submission.feedback || '';
-  const parsedAnswers = typeof answers === 'string' ? JSON.parse(answers) : answers;
-  const parsedGrading = typeof gradingDetails === 'string' ? JSON.parse(gradingDetails) : gradingDetails;
+  let parsedAnswers: any = {};
+  try {
+    parsedAnswers = typeof answers === 'string' ? JSON.parse(answers) : answers;
+  } catch {
+    parsedAnswers = {};
+  }
+  let parsedGrading: any = {};
+  try {
+    parsedGrading = typeof gradingDetails === 'string' ? JSON.parse(gradingDetails) : gradingDetails;
+  } catch {
+    parsedGrading = {};
+  }
 
   return (
     <div>
@@ -200,6 +222,8 @@ function ViewGradingResult({ submission, onBack }: { submission: Submission; onB
           </div>
         )}
       </div>
+
+      {error && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">{error}</div>}
 
       {/* AI 评语 */}
       {feedback && (
@@ -259,6 +283,7 @@ function DoAssignment({ assignment, onBack }: { assignment: Assignment; onBack: 
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (assignment.question_ids?.length) {
@@ -268,7 +293,7 @@ function DoAssignment({ assignment, onBack }: { assignment: Assignment; onBack: 
           const filtered = all.filter((q: any) => assignment.question_ids.includes(q.id));
           setQuestions(filtered);
         })
-        .catch(() => {})
+        .catch((err: any) => { setError(err.message || '加载失败'); })
         .finally(() => setLoading(false));
     } else {
       setLoading(false);
@@ -298,13 +323,15 @@ function DoAssignment({ assignment, onBack }: { assignment: Assignment; onBack: 
       <h1 className="text-2xl font-bold mb-1">{assignment.title}</h1>
       {assignment.description && <p className="text-gray-500 text-sm mb-6">{assignment.description}</p>}
 
+      {error && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">{error}</div>}
+
       <div className="space-y-4 mb-6">
         {questions.map((q, i) => (
           <div key={q.id} className="bg-white rounded-xl border p-5">
             <p className="font-medium text-gray-800 mb-3">第 {i + 1} 题: {q.content}</p>
             {q.type === 'CHOICE' && q.options ? (
               <div className="space-y-2">
-                {(typeof q.options === 'string' ? JSON.parse(q.options) : q.options).map((opt: any, j: number) => (
+                {(() => { let opts: any[]; try { opts = typeof q.options === 'string' ? JSON.parse(q.options) : q.options; } catch { opts = []; } return opts; })().map((opt: any, j: number) => (
                   <label key={j} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer ${answers[q.id] === (opt.key || opt.label || String.fromCharCode(65 + j)) ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50'}`}>
                     <input type="radio" name={q.id} value={opt.key || opt.label || String.fromCharCode(65 + j)}
                       checked={answers[q.id] === (opt.key || opt.label || String.fromCharCode(65 + j))}

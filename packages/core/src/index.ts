@@ -1,5 +1,8 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import cookie from '@fastify/cookie';
+import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
 import { PrismaClient } from '@prisma/client';
 import { loadConfig } from './config.js';
 import { EventBus } from './event-bus/index.js';
@@ -29,6 +32,24 @@ async function main() {
   // CORS
   await app.register(cors, { origin: config.cors.origin, credentials: true });
 
+  // Cookie support for HttpOnly JWT
+  await app.register(cookie);
+
+  // Security headers
+  await app.register(helmet, {
+    contentSecurityPolicy: false,  // Handled by nginx in production
+  });
+
+  // Rate limiting
+  await app.register(rateLimit, {
+    max: 100,
+    timeWindow: '1 minute',
+    // Stricter limits for auth and AI endpoints
+    keyGenerator: (request) => {
+      return (request as any).user?.userId || request.ip;
+    },
+  });
+
   // 健康检查
   app.get('/api/health', async () => ({
     status: 'ok',
@@ -37,8 +58,8 @@ async function main() {
   }));
 
   // 注册核心路由
-  registerAuthRoutes(app, prisma);
-  registerOrgRoutes(app, prisma);
+  registerAuthRoutes(app, prisma, eventBus);
+  registerOrgRoutes(app, prisma, eventBus);
   registerAIRoutes(app, prisma);
   registerAgentRoutes(app, prisma);
 
@@ -55,14 +76,16 @@ async function main() {
     }));
   });
 
-  // 加载内置插件
-  const { default: questionBankPlugin } = await import('../../../plugins/question-bank/src/index.js');
-  const { default: homeworkPlugin } = await import('../../../plugins/homework/src/index.js');
-  const { default: aiGradingPlugin } = await import('../../../plugins/ai-grading/src/index.js');
-
-  await pluginLoader.load(questionBankPlugin);
-  await pluginLoader.load(homeworkPlugin);
-  await pluginLoader.load(aiGradingPlugin);
+  // 加载内置插件 (dynamic paths to avoid rootDir constraint)
+  const pluginPaths = [
+    '../../../plugins/question-bank/src/index.js',
+    '../../../plugins/homework/src/index.js',
+    '../../../plugins/ai-grading/src/index.js',
+  ];
+  for (const p of pluginPaths) {
+    const { default: plugin } = await import(p);
+    await pluginLoader.load(plugin);
+  }
 
   // 启动服务
   try {

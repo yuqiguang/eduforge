@@ -6,11 +6,12 @@ import { apiFetch } from '@/lib/api';
 export default function ProgressPage() {
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     apiFetch('/api/plugins/homework/my-submissions')
       .then(data => setSubmissions(Array.isArray(data) ? data : []))
-      .catch(() => {})
+      .catch((err: any) => { setError(err.message || '加载失败'); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -36,6 +37,8 @@ export default function ProgressPage() {
     <div>
       <h1 className="text-2xl font-bold mb-1">学习进度</h1>
       <p className="text-gray-500 text-sm mb-6">查看你的学习统计和成绩</p>
+
+      {error && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm mb-4">{error}</div>}
 
       {/* 统计卡片 */}
       <div className="grid sm:grid-cols-3 gap-4 mb-8">
