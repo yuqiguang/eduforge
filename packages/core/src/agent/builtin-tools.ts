@@ -183,10 +183,46 @@ const generateQuestions: ToolDefinition = {
   },
 };
 
+const createAssignment: ToolDefinition = {
+  name: 'create_assignment',
+  description: '布置作业，将题目分配给指定班级，设置截止时间',
+  parameters: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', description: '作业标题' },
+      classId: { type: 'string', description: '班级ID' },
+      subjectId: { type: 'string', description: '科目ID: math/chinese/english' },
+      questionIds: { type: 'array', items: { type: 'string' }, description: '题目ID列表' },
+      deadline: { type: 'string', description: '截止时间，ISO 8601 格式' },
+    },
+    required: ['title', 'classId', 'subjectId', 'questionIds', 'deadline'],
+  },
+  confirmRequired: true,
+  roles: ['TEACHER'],
+  async execute(params, ctx) {
+    const rows: any[] = await ctx.prisma.$queryRawUnsafe(
+      `INSERT INTO plugin_hw_assignments (title, class_id, subject_id, question_ids, deadline, status, creator_id)
+       VALUES ($1, $2, $3, $4::jsonb, $5, 'PUBLISHED', $6) RETURNING id, title`,
+      params.title, params.classId, params.subjectId,
+      JSON.stringify(params.questionIds), params.deadline, ctx.userId
+    );
+    const assignment = rows[0];
+    // Emit event for notification system
+    await ctx.prisma.$executeRawUnsafe(
+      `INSERT INTO domain_events (aggregate_type, aggregate_id, event_type, payload)
+       VALUES ('assignment', $1, 'homework:assigned', $2)`,
+      assignment.id,
+      JSON.stringify({ assignmentId: assignment.id, title: params.title, classId: params.classId, deadline: params.deadline })
+    );
+    return { success: true, assignmentId: assignment.id, title: params.title };
+  },
+};
+
 export function registerBuiltinTools() {
   registerTool(queryQuestions);
   registerTool(queryAssignments);
   registerTool(querySubmissions);
   registerTool(queryAnalytics);
   registerTool(generateQuestions);
+  registerTool(createAssignment);
 }

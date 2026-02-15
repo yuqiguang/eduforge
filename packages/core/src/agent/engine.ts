@@ -7,10 +7,15 @@ import { canUseTool } from './permissions.js';
 function buildSystemPrompt(user: { name?: string; role: string }) {
   const name = user.name || '用户';
   const role = user.role;
-  const rolePrompt = role === 'TEACHER'
-    ? '你是一位专业的教学助理，帮助教师管理题库、布置作业、分析学情。'
-    : '你是一位耐心的学习辅导老师，帮助学生答疑解惑、复习错题、提升成绩。';
-  return `你是 EduForge AI 教学助手。\n当前用户：${name}（${role}）\n${rolePrompt}\n\n可用工具已通过 tools 参数提供，请根据用户需求选择合适的工具。\n对于修改类操作（如出题、布置作业），请先描述你将要做什么，等待用户确认。\n回复使用中文。`;
+  return `你是 EduForge AI 教学助手。
+当前用户：${name}（角色：${role}）
+
+你可以使用提供的工具来完成任务。请注意：
+- 查询类工具（query_*）可以直接调用，结果会立即返回
+- 修改类工具（generate_questions、create_assignment 等）也请直接调用，系统会自动弹出确认对话框让用户确认
+- 不要自己描述确认流程，直接调用工具即可
+- 回复使用中文
+- 如果用户问的问题不需要工具，直接回答即可`;
 }
 
 async function getAIConfig(prisma: PrismaClient, schoolId?: string) {
@@ -124,7 +129,7 @@ export async function chat(
 
       // Check if confirm required
       if (toolDef?.confirmRequired) {
-        const preview = `将调用 ${toolName}: ${JSON.stringify(params)}`;
+        const preview = `将执行「${toolDef.description}」，参数：${JSON.stringify(params)}`;
         const rows: any[] = await prisma.$queryRawUnsafe(
           `INSERT INTO ai_pending_actions (session_id, user_id, tool_name, parameters, preview) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
           sessionId, user.userId, toolName, JSON.stringify(params), preview
@@ -133,7 +138,12 @@ export async function chat(
         const toolResult = JSON.stringify({ status: 'PENDING_CONFIRMATION', actionId: pending.id, preview });
         messages.push({ role: 'tool', tool_call_id: tc.id, content: toolResult });
         await saveMessage(prisma, { sessionId, role: 'tool', toolResult, metadata: { tool_call_id: tc.id } });
-        continue;
+        // Return immediately with pending action info — don't let AI loop
+        return {
+          sessionId,
+          reply: `操作需要确认：${preview}`,
+          pendingAction: { actionId: pending.id, toolName, parameters: params, preview },
+        };
       }
 
       try {
@@ -272,16 +282,20 @@ export async function chatStream(
         }
 
         if (toolDef?.confirmRequired) {
-          const preview = `将调用 ${toolName}: ${JSON.stringify(params)}`;
+          const preview = `将执行「${toolDef.description}」，参数：${JSON.stringify(params)}`;
           const rows: any[] = await prisma.$queryRawUnsafe(
             `INSERT INTO ai_pending_actions (session_id, user_id, tool_name, parameters, preview) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
             sessionId, user.userId, toolName, JSON.stringify(params), preview
           );
-          const result = { status: 'PENDING_CONFIRMATION', actionId: rows[0].id, preview };
+          const pending = rows[0];
+          const result = { status: 'PENDING_CONFIRMATION', actionId: pending.id, preview };
           messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
           await saveMessage(prisma, { sessionId, role: 'tool', toolResult: result, metadata: { tool_call_id: tc.id } });
-          send('tool_result', { name: toolName, result });
-          continue;
+          // Send confirm event and stop
+          send('confirm', { actionId: pending.id, toolName, parameters: params, preview });
+          send('done', { sessionId });
+          close();
+          return;
         }
 
         try {
