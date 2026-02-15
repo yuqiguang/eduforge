@@ -7,20 +7,23 @@ const queryQuestions: ToolDefinition = {
   parameters: {
     type: 'object',
     properties: {
-      subject: { type: 'string', description: '科目' },
+      subject: { type: 'string', description: '科目ID: math/chinese/english' },
       difficulty: { type: 'string', description: '难度: EASY/MEDIUM/HARD' },
-      type: { type: 'string', description: '题型: CHOICE/FILL/SHORT_ANSWER/ESSAY' },
+      type: { type: 'string', description: '题型: SINGLE_CHOICE/FILL_BLANK/CALCULATION/SHORT_ANSWER' },
       keyword: { type: 'string', description: '关键词搜索' },
       limit: { type: 'number', description: '返回数量，默认10' },
     },
   },
   roles: ['TEACHER', 'STUDENT'],
   async execute(params, ctx) {
-    let sql = `SELECT id, subject, type, difficulty, content, options, answer FROM plugin_qb_questions WHERE 1=1`;
+    let sql = `SELECT id, subject_id, type, difficulty, content, options, answer FROM plugin_qb_questions WHERE status = 'ACTIVE'`;
     const args: any[] = [];
     let n = 0;
-    if (params.subject) { args.push(params.subject); sql += ` AND subject = $${++n}`; }
-    if (params.difficulty) { args.push(params.difficulty); sql += ` AND difficulty = $${++n}`; }
+    if (params.subject) { args.push(params.subject); sql += ` AND subject_id = $${++n}`; }
+    if (params.difficulty) {
+      const diffMap: Record<string, number> = { EASY: 0.3, MEDIUM: 0.5, HARD: 0.8 };
+      args.push(diffMap[params.difficulty] || 0.5); sql += ` AND difficulty = $${++n}`;
+    }
     if (params.type) { args.push(params.type); sql += ` AND type = $${++n}`; }
     if (params.keyword) { args.push(`%${params.keyword}%`); sql += ` AND content ILIKE $${++n}`; }
     const limit = params.limit || 10;
@@ -42,7 +45,7 @@ const queryAssignments: ToolDefinition = {
   },
   roles: ['TEACHER', 'STUDENT'],
   async execute(params, ctx) {
-    let sql = `SELECT id, title, class_id, status, due_date, created_at FROM plugin_hw_assignments WHERE 1=1`;
+    let sql = `SELECT id, title, class_id, status, deadline, created_at FROM plugin_hw_assignments WHERE 1=1`;
     const args: any[] = [];
     let n = 0;
     if (params.classId) { args.push(params.classId); sql += ` AND class_id = $${++n}`; }
@@ -64,7 +67,7 @@ const querySubmissions: ToolDefinition = {
   },
   roles: ['TEACHER', 'STUDENT'],
   async execute(params, ctx) {
-    let sql = `SELECT id, assignment_id, student_id, status, score, feedback, submitted_at FROM plugin_hw_submissions WHERE 1=1`;
+    let sql = `SELECT id, assignment_id, student_id, status, score, grading_result, submitted_at FROM plugin_hw_submissions WHERE 1=1`;
     const args: any[] = [];
     let n = 0;
     if (params.assignmentId) { args.push(params.assignmentId); sql += ` AND assignment_id = $${++n}`; }
@@ -119,7 +122,7 @@ const generateQuestions: ToolDefinition = {
   parameters: {
     type: 'object',
     properties: {
-      subject: { type: 'string', description: '科目' },
+      subject: { type: 'string', description: '科目ID: math/chinese/english' },
       topic: { type: 'string', description: '知识点/主题' },
       count: { type: 'number', description: '题目数量' },
       difficulty: { type: 'string', description: '难度: EASY/MEDIUM/HARD' },
@@ -166,11 +169,13 @@ const generateQuestions: ToolDefinition = {
     let inserted = 0;
     for (const q of questions) {
       await ctx.prisma.$executeRawUnsafe(
-        `INSERT INTO plugin_qb_questions (subject, type, difficulty, content, options, answer, explanation, school_id, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        params.subject, q.type || 'CHOICE', params.difficulty, q.content,
+        `INSERT INTO plugin_qb_questions (subject_id, type, difficulty, content, options, answer, explanation, creator_id)
+         VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)`,
+        params.subject, q.type || 'SINGLE_CHOICE',
+        params.difficulty === 'EASY' ? 0.3 : params.difficulty === 'HARD' ? 0.8 : 0.5,
+        q.content,
         q.options ? JSON.stringify(q.options) : null, q.answer || '', q.explanation || '',
-        ctx.schoolId || null, ctx.userId
+        ctx.userId
       );
       inserted++;
     }

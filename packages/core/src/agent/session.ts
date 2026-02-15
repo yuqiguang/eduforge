@@ -32,7 +32,7 @@ export async function saveMessage(prisma: PrismaClient, data: {
   metadata?: any;
 }) {
   const rows: any[] = await prisma.$queryRawUnsafe(
-    `INSERT INTO ai_chat_messages (session_id, role, content, tool_calls, tool_result, metadata) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    `INSERT INTO ai_chat_messages (session_id, role, content, tool_calls, tool_result, metadata) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb) RETURNING *`,
     data.sessionId, data.role, data.content || null,
     data.toolCalls ? JSON.stringify(data.toolCalls) : null,
     data.toolResult ? JSON.stringify(data.toolResult) : null,
