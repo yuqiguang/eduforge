@@ -93,8 +93,24 @@ export function registerAgentRoutes(app: FastifyInstance, prisma: PrismaClient) 
     return listSessions(prisma, user.userId);
   });
 
-  // GET /api/chat/sessions/:id
+  // POST /api/chat/sessions — create a new session
+  app.post('/api/chat/sessions', { preHandler: [authMiddleware] }, async (request) => {
+    const user = (request as any).user;
+    const body = request.body as any;
+    const { createSession } = await import('./session.js');
+    const session = await createSession(prisma, user.userId, body?.title || '新对话');
+    return session;
+  });
+
+  // GET /api/chat/sessions/:id — get session messages
   app.get('/api/chat/sessions/:id', { preHandler: [authMiddleware] }, async (request) => {
+    const user = (request as any).user;
+    const { id } = request.params as any;
+    return getSessionMessages(prisma, id, user.userId);
+  });
+
+  // GET /api/chat/sessions/:id/messages — alias for compatibility
+  app.get('/api/chat/sessions/:id/messages', { preHandler: [authMiddleware] }, async (request) => {
     const user = (request as any).user;
     const { id } = request.params as any;
     return getSessionMessages(prisma, id, user.userId);

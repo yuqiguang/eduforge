@@ -24,6 +24,7 @@ const registerSchema = z.object({
   password: z.string().min(6, '密码至少6个字符'),
   role: z.enum(['TEACHER', 'STUDENT', 'ADMIN']).default('STUDENT'),
   schoolName: z.string().min(2, '机构名称至少2个字符').optional(),
+  independent: z.boolean().optional(), // 独立教师模式
 }).refine(
   (data) => data.role !== 'ADMIN' || (data.schoolName && data.schoolName.length >= 2),
   { message: '机构注册必须填写机构名称', path: ['schoolName'] },
@@ -67,9 +68,18 @@ export function registerAuthRoutes(app: FastifyInstance, prisma: PrismaClient, e
       data: { lastLoginAt: new Date() },
     });
 
+    // 检查是否有 Teacher profile（独立教师 = ADMIN + Teacher）
+    const hasTeacherProfile = await prisma.teacher.findUnique({ where: { userId: user.id } });
+
     const token = signToken({ userId: user.id, email: user.email ?? undefined, role: user.role, schoolId: user.schoolId ?? undefined });
     reply.setCookie('token', token, COOKIE_OPTIONS);
-    return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role, schoolId: user.schoolId } };
+    return {
+      token,
+      user: {
+        id: user.id, name: user.name, email: user.email, role: user.role,
+        schoolId: user.schoolId, isTeacher: !!hasTeacherProfile,
+      },
+    };
   });
 
   // 注册
@@ -86,12 +96,14 @@ export function registerAuthRoutes(app: FastifyInstance, prisma: PrismaClient, e
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
+    const existingSchool = await prisma.school.findFirst();
 
     let schoolId: string | undefined;
+    let finalRole = role;
+    let createTeacherProfile = false;
 
     if (role === 'ADMIN') {
       // 单机构模式：系统中只允许一个学校
-      const existingSchool = await prisma.school.findFirst();
       if (existingSchool) {
         return reply.code(409).send({ error: '系统已有机构注册，请联系管理员获取账号' });
       }
@@ -105,15 +117,40 @@ export function registerAuthRoutes(app: FastifyInstance, prisma: PrismaClient, e
         data: { name: schoolName, code },
       });
       schoolId = school.id;
+
+      // 独立教师模式：ADMIN + Teacher profile
+      if (result.data.independent) {
+        createTeacherProfile = true;
+      }
+    } else if (role === 'TEACHER') {
+      if (!existingSchool) {
+        return reply.code(400).send({ error: '暂无学校，请先注册为独立教师或机构' });
+      }
+      // 独立教师模式下不允许教师注册
+      const admin = await prisma.user.findFirst({ where: { schoolId: existingSchool.id, role: 'ADMIN' }, select: { id: true } });
+      if (admin) {
+        const adminIsTeacher = await prisma.teacher.findUnique({ where: { userId: admin.id } });
+        if (adminIsTeacher) {
+          return reply.code(400).send({ error: '当前为独立教师模式，仅开放学生注册' });
+        }
+      }
+      schoolId = existingSchool.id;
+      createTeacherProfile = true;
+    } else if (role === 'STUDENT') {
+      if (!existingSchool) {
+        return reply.code(400).send({ error: '暂无学校，请等待教师或机构先注册' });
+      }
+      schoolId = existingSchool.id;
     }
 
     const user = await prisma.user.create({
-      data: { name, email, passwordHash, role, schoolId },
+      data: { name, email, passwordHash, role: finalRole, schoolId },
     });
 
-    if (role === 'TEACHER') {
+    if (createTeacherProfile) {
       await prisma.teacher.create({ data: { userId: user.id } });
-    } else if (role === 'STUDENT') {
+    }
+    if (role === 'STUDENT') {
       await prisma.student.create({ data: { userId: user.id } });
     }
 
@@ -121,7 +158,13 @@ export function registerAuthRoutes(app: FastifyInstance, prisma: PrismaClient, e
 
     const token = signToken({ userId: user.id, email: user.email ?? undefined, role: user.role, schoolId: user.schoolId ?? undefined });
     reply.setCookie('token', token, COOKIE_OPTIONS);
-    return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role, schoolId: user.schoolId } };
+    return {
+      token,
+      user: {
+        id: user.id, name: user.name, email: user.email, role: user.role,
+        schoolId: user.schoolId, isTeacher: createTeacherProfile,
+      },
+    };
   });
 
   // 获取当前用户
@@ -136,7 +179,9 @@ export function registerAuthRoutes(app: FastifyInstance, prisma: PrismaClient, e
       where: { id: userId },
       select: { id: true, name: true, email: true, role: true, avatarUrl: true, schoolId: true },
     });
-    return { user };
+    if (!user) return { user: null };
+    const hasTeacher = await prisma.teacher.findUnique({ where: { userId } });
+    return { user: { ...user, isTeacher: !!hasTeacher } };
   });
 
   // 登出
@@ -145,9 +190,29 @@ export function registerAuthRoutes(app: FastifyInstance, prisma: PrismaClient, e
     return { success: true };
   });
 
-  // 检查是否允许注册机构（单机构模式）
-  app.get('/api/auth/admin-available', async () => {
-    const count = await prisma.school.count();
-    return { available: count === 0 };
+  // 检查注册状态（单机构模式）
+  app.get('/api/auth/register-status', async () => {
+    const school = await prisma.school.findFirst({ select: { id: true, name: true } });
+    if (!school) {
+      return { hasSchool: false, schoolName: null, allowTeacher: false };
+    }
+
+    // 检查管理员是否是独立教师（有 Teacher profile）
+    // 独立教师模式：只开放学生注册；机构模式：教师+学生都可注册
+    const admin = await prisma.user.findFirst({
+      where: { schoolId: school.id, role: 'ADMIN' },
+      select: { id: true },
+    });
+    let isIndependentTeacher = false;
+    if (admin) {
+      const hasTeacher = await prisma.teacher.findUnique({ where: { userId: admin.id } });
+      isIndependentTeacher = !!hasTeacher;
+    }
+
+    return {
+      hasSchool: true,
+      schoolName: school.name,
+      allowTeacher: !isIndependentTeacher,
+    };
   });
 }

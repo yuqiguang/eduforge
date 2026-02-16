@@ -99,26 +99,65 @@ export function registerAIRoutes(app: FastifyInstance, prisma: PrismaClient) {
     return { ...config, apiKey: maskApiKey(body.apiKey) };
   });
 
-  // AI 连接测试
+  // 删除 AI 配置
+  app.delete('/api/ai/config/:id', { preHandler: [authMiddleware] }, async (request, reply) => {
+    const user = (request as any).user;
+    if (!['ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+      return reply.code(403).send({ error: '权限不足' });
+    }
+    const { id } = request.params as { id: string };
+    const config = await prisma.aIConfig.findUnique({ where: { id } });
+    if (!config) {
+      return reply.code(404).send({ error: '配置不存在' });
+    }
+    // ADMIN 只能删除本校的配置
+    if (user.role === 'ADMIN' && config.schoolId !== user.schoolId) {
+      return reply.code(403).send({ error: '无权删除此配置' });
+    }
+    await prisma.aIConfig.delete({ where: { id } });
+    return { success: true };
+  });
+
+  // AI 连接测试（支持传入参数直接测试，或使用已保存的配置）
   app.post('/api/ai/test', { preHandler: [authMiddleware] }, async (request, reply) => {
     const user = (request as any).user;
     if (!['ADMIN', 'TEACHER', 'SUPER_ADMIN'].includes(user.role)) {
       return reply.code(403).send({ error: '权限不足' });
     }
-    const gateway = new AIGateway(prisma);
+
+    const body = request.body as any;
     const start = Date.now();
+
     try {
-      const result = await gateway.complete({
-        task: 'test',
-        messages: [
-          { role: 'system', content: '你是测试助手。' },
-          { role: 'user', content: '请回复OK' },
-        ],
-        maxTokens: 16,
-        userId: user.userId,
-        schoolId: user.schoolId,
-        plugin: 'system-test',
-      });
+      let result;
+      if (body?.apiKey) {
+        // 直接用传入的参数测试（保存前测试）
+        result = await openaiComplete({
+          provider: body.provider || 'openai',
+          model: body.model || 'gpt-4o-mini',
+          apiKey: body.apiKey,
+          baseUrl: body.baseUrl,
+          messages: [
+            { role: 'system', content: '你是测试助手。' },
+            { role: 'user', content: '请回复OK' },
+          ],
+          maxTokens: 16,
+        });
+      } else {
+        // 用已保存的配置测试
+        const gateway = new AIGateway(prisma);
+        result = await gateway.complete({
+          task: 'test',
+          messages: [
+            { role: 'system', content: '你是测试助手。' },
+            { role: 'user', content: '请回复OK' },
+          ],
+          maxTokens: 16,
+          userId: user.userId,
+          schoolId: user.schoolId,
+          plugin: 'system-test',
+        });
+      }
       return { success: true, model: result.model, responseTime: Date.now() - start };
     } catch (err: any) {
       return { success: false, error: err.message, responseTime: Date.now() - start };

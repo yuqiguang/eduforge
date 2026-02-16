@@ -11,7 +11,6 @@ const teacherNav = [
   { href: '/dashboard/assignments', label: '作业', icon: '📋' },
   { href: '/dashboard/classes', label: '班级', icon: '👥' },
   { href: '/dashboard/analytics', label: '学情分析', icon: '📈' },
-  { href: '/dashboard/ai-settings', label: 'AI 设置', icon: '🤖' },
 ];
 
 const studentNav = [
@@ -22,13 +21,30 @@ const studentNav = [
   { href: '/dashboard/progress', label: '学习进度', icon: '📈' },
 ];
 
+// 纯机构管理员（非独立教师）
 const adminNav = [
   { href: '/dashboard', label: '概览', icon: '📊' },
   { href: '/dashboard/chat', label: 'AI 助手', icon: '🤖' },
   { href: '/dashboard/school', label: '学校管理', icon: '🏫' },
   { href: '/dashboard/classes', label: '班级管理', icon: '👥' },
-  { href: '/dashboard/ai-settings', label: 'AI 设置', icon: '⚙️' },
 ];
+
+// 独立教师（ADMIN + Teacher profile）：教学功能 + 管理入口
+const independentTeacherNav = [
+  { href: '/dashboard', label: '概览', icon: '📊' },
+  { href: '/dashboard/chat', label: 'AI 助手', icon: '🤖' },
+  { href: '/dashboard/questions', label: '题库', icon: '📚' },
+  { href: '/dashboard/assignments', label: '作业', icon: '📋' },
+  { href: '/dashboard/classes', label: '班级', icon: '👥' },
+  { href: '/dashboard/analytics', label: '学情分析', icon: '📈' },
+];
+
+function getNav(user: any) {
+  if (user.role === 'STUDENT') return studentNav;
+  if (user.role === 'ADMIN' && user.isTeacher) return independentTeacherNav;
+  if (user.role === 'ADMIN') return adminNav;
+  return teacherNav;
+}
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -47,7 +63,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!user) return null;
 
-  const nav = user.role === 'STUDENT' ? studentNav : user.role === 'ADMIN' ? adminNav : teacherNav;
+  const nav = getNav(user);
+  const showAdminLink = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -65,8 +82,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-600">{user.name}</span>
           <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-600 font-medium">
-            {user.role === 'TEACHER' ? '教师' : user.role === 'STUDENT' ? '学生' : user.role === 'ADMIN' ? '机构管理员' : '管理员'}
+            {user.role === 'ADMIN' && user.isTeacher ? '教师/管理员' : user.role === 'TEACHER' ? '教师' : user.role === 'STUDENT' ? '学生' : user.role === 'ADMIN' ? '管理员' : '管理员'}
           </span>
+          {showAdminLink && (
+            <Link href="/admin" className="text-xs text-gray-400 hover:text-blue-600 transition">管理后台</Link>
+          )}
           <button onClick={() => { localStorage.clear(); router.push('/login'); }}
             className="text-sm text-gray-400 hover:text-gray-600">退出</button>
         </div>
@@ -86,6 +106,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             );
           })}
         </nav>
+
+        {/* 管理后台入口 — 底部 */}
+        {showAdminLink && (
+          <div className="absolute bottom-0 left-0 right-0 p-3 border-t">
+            <Link href="/admin"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-100 transition">
+              <span>⚙️</span>
+              <span>管理后台</span>
+            </Link>
+          </div>
+        )}
       </aside>
 
       {/* 遮罩 */}

@@ -15,7 +15,7 @@ const queryQuestions: ToolDefinition = {
       limit: { type: 'number', description: '返回数量，默认10' },
     },
   },
-  roles: ['TEACHER', 'STUDENT'],
+  roles: ['TEACHER', 'ADMIN', 'STUDENT'],
   async execute(params, ctx) {
     let sql = `SELECT id, subject_id, type, difficulty, content, options, answer FROM plugin_qb_questions WHERE status = 'ACTIVE'`;
     const args: any[] = [];
@@ -44,7 +44,7 @@ const queryAssignments: ToolDefinition = {
       status: { type: 'string', description: '状态: DRAFT/PUBLISHED/CLOSED' },
     },
   },
-  roles: ['TEACHER', 'STUDENT'],
+  roles: ['TEACHER', 'ADMIN', 'STUDENT'],
   async execute(params, ctx) {
     let sql = `SELECT id, title, class_id, status, deadline, created_at FROM plugin_hw_assignments WHERE 1=1`;
     const args: any[] = [];
@@ -66,7 +66,7 @@ const querySubmissions: ToolDefinition = {
       studentId: { type: 'string', description: '学生ID' },
     },
   },
-  roles: ['TEACHER', 'STUDENT'],
+  roles: ['TEACHER', 'ADMIN', 'STUDENT'],
   async execute(params, ctx) {
     let sql = `SELECT id, assignment_id, student_id, status, score, grading_result, submitted_at FROM plugin_hw_submissions WHERE 1=1`;
     const args: any[] = [];
@@ -94,7 +94,7 @@ const queryAnalytics: ToolDefinition = {
     },
     required: ['classId'],
   },
-  roles: ['TEACHER'],
+  roles: ['TEACHER', 'ADMIN'],
   async execute(params, ctx) {
     const classId = params.classId;
     const avgScore: any[] = await ctx.prisma.$queryRawUnsafe(
@@ -131,7 +131,7 @@ const generateQuestions: ToolDefinition = {
     required: ['subject', 'topic', 'count', 'difficulty'],
   },
   confirmRequired: true,
-  roles: ['TEACHER'],
+  roles: ['TEACHER', 'ADMIN'],
   async execute(params, ctx) {
     // Get AI config
     const configs: any[] = await ctx.prisma.$queryRawUnsafe(
@@ -199,7 +199,7 @@ const createAssignment: ToolDefinition = {
     required: ['title', 'classId', 'subjectId', 'questionIds', 'deadline'],
   },
   confirmRequired: true,
-  roles: ['TEACHER'],
+  roles: ['TEACHER', 'ADMIN'],
   async execute(params, ctx) {
     const rows: any[] = await ctx.prisma.$queryRawUnsafe(
       `INSERT INTO plugin_hw_assignments (title, class_id, subject_id, question_ids, deadline, status, creator_id)

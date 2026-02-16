@@ -27,6 +27,7 @@ const PROVIDER_URLS: Record<string, string> = {
   openai: 'https://api.openai.com/v1',
   qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
   deepseek: 'https://api.deepseek.com/v1',
+  zhipu: 'https://open.bigmodel.cn/api/paas/v4',
   doubao: 'https://ark.cn-beijing.volces.com/api/v3',
   ollama: 'http://localhost:11434/v1',
 };

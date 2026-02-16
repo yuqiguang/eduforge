@@ -7,7 +7,7 @@ import { apiFetch } from '@/lib/api';
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 // ── Types ──────────────────────────────────────────────
-interface Session { id: string; title: string; updatedAt: string }
+interface Session { id: string; title: string; updated_at: string; created_at: string }
 interface Message {
   role: 'user' | 'assistant';
   content: string;
@@ -33,13 +33,15 @@ function renderMarkdown(text: string) {
 
 // ── SSE stream with fetch fallback ─────────────────────
 function streamChat(
-  sessionId: string,
+  sessionId: string | null,
   message: string,
-  onChunk: (data: any) => void,
+  onEvent: (event: string, data: any) => void,
   onError: (err: any) => void,
   onDone: () => void,
 ) {
-  const url = `${API_BASE}/api/chat/stream?sessionId=${sessionId}&message=${encodeURIComponent(message)}`;
+  const params = new URLSearchParams({ message });
+  if (sessionId) params.set('sessionId', sessionId);
+  const url = `${API_BASE}/api/chat/stream?${params}`;
   const ctrl = new AbortController();
 
   fetch(url, {
@@ -51,6 +53,7 @@ function streamChat(
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let buf = '';
+      let currentEvent = 'message';
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -58,8 +61,14 @@ function streamChat(
         const lines = buf.split('\n');
         buf = lines.pop()!;
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try { onChunk(JSON.parse(line.slice(6))); } catch { /* ignore malformed SSE chunks */ }
+          if (line.startsWith('event: ')) {
+            currentEvent = line.slice(7).trim();
+          } else if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              onEvent(currentEvent, data);
+            } catch { /* ignore malformed SSE chunks */ }
+            currentEvent = 'message'; // reset after data
           }
         }
       }
@@ -115,7 +124,12 @@ export default function ChatPage() {
     (async () => {
       try {
         const data = await apiFetch(`/api/chat/sessions/${activeId}/messages`);
-        setMessages(Array.isArray(data) ? data : data.messages ?? []);
+        const raw: any[] = Array.isArray(data) ? data : data.messages ?? [];
+        // Convert DB rows to Message format, filtering out tool-role messages
+        const msgs: Message[] = raw
+          .filter((m: any) => m.role === 'user' || m.role === 'assistant')
+          .map((m: any) => ({ role: m.role, content: m.content || '' }));
+        setMessages(msgs);
       } catch (err: any) {
         setError(err.message || '加载失败');
         setMessages([]);
@@ -132,6 +146,7 @@ export default function ChatPage() {
     if (!msg || sending) return;
     setInput('');
     setSending(true);
+    setError('');
     setThinking('正在思考...');
 
     let sid = activeId;
@@ -147,7 +162,7 @@ export default function ChatPage() {
         setActiveId(sid);
         loadSessions();
       } catch (err: any) {
-        setError(err.message || '加载失败');
+        setError(err.message || '创建会话失败');
         setSending(false);
         setThinking('');
         return;
@@ -172,20 +187,26 @@ export default function ChatPage() {
     const cancel = streamChat(
       sid!,
       msg,
-      (data) => {
-        switch (data.type) {
-          case 'token':
-            assistantContent += data.content;
+      (event, data) => {
+        switch (event) {
+          case 'session':
+            if (data.sessionId && data.sessionId !== sid) {
+              setActiveId(data.sessionId);
+            }
+            break;
+          case 'content':
+            assistantContent += data.text;
             updateAssistant(assistantContent);
             setThinking('');
             break;
-          case 'tool_start':
-            setThinking(data.description || `正在调用 ${data.tool}...`);
+          case 'tool_call':
+            setThinking(data.description || `正在调用 ${data.name}...`);
             break;
           case 'tool_result':
             setThinking('');
             break;
           case 'confirm':
+            setThinking('');
             setMessages(prev => [...prev, {
               role: 'assistant',
               content: '',
@@ -193,10 +214,10 @@ export default function ChatPage() {
             }]);
             break;
           case 'done':
-            if (data.sessionId && data.sessionId !== sid) setActiveId(data.sessionId);
             break;
           case 'error':
-            updateAssistant(`⚠️ ${data.message}`);
+            setThinking('');
+            updateAssistant(`⚠️ ${data.error || '请求失败'}`);
             break;
         }
       },
@@ -259,7 +280,7 @@ export default function ChatPage() {
               <button key={s.id} onClick={() => { setActiveId(s.id); setSidebarOpen(false); }}
                 className={`w-full text-left px-3 py-2 rounded-lg text-sm truncate transition ${activeId === s.id ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>
                 <div className="truncate">{s.title || '新对话'}</div>
-                <div className="text-xs text-gray-400 mt-0.5">{new Date(s.updatedAt).toLocaleDateString()}</div>
+                <div className="text-xs text-gray-400 mt-0.5">{new Date(s.updated_at).toLocaleDateString()}</div>
               </button>
             ))}
           </div>
@@ -282,7 +303,7 @@ export default function ChatPage() {
                 <button key={s.id} onClick={() => { setActiveId(s.id); setSidebarOpen(false); }}
                   className={`w-full text-left px-3 py-2 rounded-lg text-sm truncate transition ${activeId === s.id ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>
                   <div className="truncate">{s.title || '新对话'}</div>
-                  <div className="text-xs text-gray-400 mt-0.5">{new Date(s.updatedAt).toLocaleDateString()}</div>
+                  <div className="text-xs text-gray-400 mt-0.5">{new Date(s.updated_at).toLocaleDateString()}</div>
                 </button>
               ))}
             </div>
